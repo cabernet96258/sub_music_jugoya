@@ -245,7 +245,7 @@
 
   /* はなまるになるタイミングの範囲（再生中・一時停止中だけ表示） */
   #zones { display: none; }
-  body.playmode #zones { display: block; }
+  body.playmode.scoring #zones { display: block; }
   .hz {
     position: absolute; top: 50px; height: 124px; z-index: 4; pointer-events: none;
     background: rgba(255,64,160,.12);
@@ -852,7 +852,7 @@
   const STRAY = { mk: '✓', wd: 'たたきすぎ', color: '#78909c' };
   const STRAY_PENALTY = 20;     // 休符や何もないところでたたいたときの減点
 
-  let game = { score: 0, max: 0, lit: 0, judged: new Set() };
+  let game = { score: 0, max: 0, lit: 0, judged: new Set(), scoring: true };
 
   const STAR_SVG = '<svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
   function buildStars() {
@@ -877,9 +877,11 @@
   function percent() { return game.max ? Math.round(Math.max(0, game.score) / game.max * 100) : 0; }
   function starCount(pct) { return pct >= 95 ? 5 : Math.min(4, Math.floor(pct / 20)); }
 
-  function resetGame() {
+  // scoring が false（おてほん ON）のときは採点しない
+  function resetGame(scoring) {
     const hits = state.notes.filter((n) => !TYPES[n.t].rest).length;
-    game = { score: 0, max: hits * 100, lit: 0, judged: new Set() };
+    game = { score: 0, max: hits * 100, lit: 0, judged: new Set(), scoring };
+    document.body.classList.toggle('scoring', scoring);
     renderZones();
     for (const el of starsEl.children) el.classList.remove('lit', 'kiran');
     updateScore();
@@ -887,6 +889,7 @@
 
   // 点数と星を更新。新しく光った星はキランと光らせて音も鳴らす
   function updateScore() {
+    if (!game.scoring) { pointsEl.textContent = 'おてほん'; return; }
     if (game.max === 0) { pointsEl.textContent = '-- てん'; return; }
     const pct = percent(), lit = starCount(pct);
     pointsEl.textContent = pct + ' てん';
@@ -959,6 +962,7 @@
     const late = Math.max(0, (performance.now() - ev.timeStamp) / 1000);  // 入力から処理までの遅れ
     const now = ctx.currentTime - late - s.lat;
     clap(ctx.currentTime, ctx.destination);    // たたいた音
+    if (!game.scoring) return;                 // おてほん ON のときは採点しない
     if (now < s.time(s.R) - HIT_WIN) return;   // カウント中は数えない
     let best = null, bestD = Infinity;
     for (const n of state.notes) {
@@ -998,7 +1002,7 @@
     const time = (e) => t0 + (e - startE) * es;
     // 聞こえる音は出力の遅れぶん後ろにずれるので、表示と判定もそれに合わせる
     const lat = Math.min(0.1, Math.max(0, ctx.outputLatency || ctx.baseLatency || 0));
-    if (!resume) resetGame();
+    if (!resume) resetGame(!state.otehon);
 
     const popped = new Set();
     for (const n of state.notes) if (startOf(n) < R) popped.add(n.id);
@@ -1053,12 +1057,12 @@
       }
       el.classList.toggle('sounding', e >= st && e < en);
       // たたかないまま通り過ぎた音符
-      if (!TYPES[n.t].rest && !game.judged.has(n.id) && st >= s.R && now > s.time(st) + HIT_WIN) judgeNote(n, MISS);
+      if (game.scoring && !TYPES[n.t].rest && !game.judged.has(n.id) && st >= s.R && now > s.time(st) + HIT_WIN) judgeNote(n, MISS);
     }
 
     // バーがはなまるの範囲に入っている間はバーもピンクに光らせる
     let inZone = false;
-    for (const n of state.notes) {
+    for (const n of game.scoring ? state.notes : []) {
       if (TYPES[n.t].rest || game.judged.has(n.id) || startOf(n) < s.R) continue;
       if (Math.abs(now - s.time(startOf(n))) <= GRADES[0].win) { inZone = true; break; }
     }
@@ -1066,7 +1070,7 @@
 
     if (ctx.currentTime >= s.time(TOTAL) + 1) {
       stop();
-      if (game.max > 0) showResult();   // 最後まで演奏したら結果発表
+      if (game.scoring && game.max > 0) showResult();   // 最後まで演奏したら結果発表
       return;
     }
     s.raf = requestAnimationFrame(frame);
@@ -1105,7 +1109,7 @@
     pausedE = Math.min(TOTAL, Math.max(session.R, session.curE));
     // 再開位置より前で、まだ判定していない音符は「たたかなかった」ことにする
     const nextR = Math.floor(pausedE / 2) * 2;
-    for (const n of state.notes) {
+    for (const n of game.scoring ? state.notes : []) {
       if (!TYPES[n.t].rest && !game.judged.has(n.id) && startOf(n) < nextR) judgeNote(n, MISS, false);
     }
     endSession();
@@ -1136,7 +1140,7 @@
     btnPause.disabled = mode !== 'playing';
     btnStop.disabled = mode === 'edit';
     bpmInput.disabled = mode === 'playing';
-    btnOtehon.disabled = mode === 'playing';
+    btnOtehon.disabled = mode !== 'edit';   // 一時停止中も切り替えない（採点するかどうかが途中で変わらないように）
     soundSel.disabled = mode === 'playing';
     btnClear.disabled = mode !== 'edit';
   }

@@ -117,6 +117,29 @@
     40% { opacity: 1; transform: scale(1.5) rotate(45deg); }
     100% { opacity: 0; transform: scale(.6) rotate(90deg); }
   }
+  /* けっか はっぴょう */
+  #result {
+    position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center;
+    background: rgba(40,30,10,.45);
+  }
+  #result.show { display: flex; }
+  #result .box {
+    background: #fffdf5; border: 6px solid #ffca28; border-radius: 28px; padding: 26px 44px 24px;
+    text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,.3); min-width: 520px;
+    animation: boxIn .4s ease-out;
+  }
+  @keyframes boxIn { 0% { transform: scale(.5); opacity: 0; } 70% { transform: scale(1.05); opacity: 1; } 100% { transform: scale(1); } }
+  #result h2 { margin: 0 0 14px; font-size: 34px; color: var(--accent); letter-spacing: .1em; }
+  #resStars { display: flex; justify-content: center; gap: 10px; margin: 6px 0 12px; }
+  #resStars .star { width: 72px; height: 72px; }
+  #resStars .star::after { font-size: 28px; top: -14px; right: -12px; }
+  #resText { min-height: 96px; }
+  #resText .big { font-size: 40px; font-weight: 900; color: #f9a825; -webkit-text-stroke: 1px #e65100; }
+  #resText .pts { font-size: 22px; font-weight: bold; color: var(--muted); margin-top: 2px; }
+  #resText .msg { font-size: 24px; font-weight: bold; color: #e91e63; margin-top: 6px; }
+  #resText > * { animation: boxIn .4s ease-out; }
+  #resClose { margin-top: 14px; background: #ffe0cc; border-color: var(--accent); font-size: 20px; padding: 8px 40px; }
+
   #points { font-size: 22px; font-weight: 900; color: var(--accent); min-width: 4.2em; text-align: right; white-space: nowrap; }
 
   /* 判定のエフェクト（バーの少し左＝たたいた音符が流れていく側に出す） */
@@ -294,6 +317,15 @@
     </div>
   </div>
 
+  <div id="result" role="dialog" aria-label="けっか はっぴょう">
+    <div class="box">
+      <h2>けっか はっぴょう！</h2>
+      <div id="resStars"></div>
+      <div id="resText"></div>
+      <button id="resClose" type="button">とじる</button>
+    </div>
+  </div>
+
 <script>
 (() => {
   'use strict';
@@ -337,6 +369,7 @@
         hint = $('hint'), countEl = $('count'), countSpan = countEl.querySelector('span'),
         mmNotes = $('mmNotes'), mmWindow = $('mmWindow'), mmHead = $('mmHead'), minimap = $('minimap'),
         cardsEl = $('cards'), trash = $('trash'), stage = $('stage'), starsEl = $('stars'), pointsEl = $('points'),
+        resultEl = $('result'), resStars = $('resStars'), resText = $('resText'), resClose = $('resClose'),
         btnPlay = $('btnPlay'), btnPause = $('btnPause'), btnStop = $('btnStop'),
         btnOtehon = $('btnOtehon'), soundSel = $('sound'), btnClear = $('btnClear'), bpmInput = $('bpm'), bpmVal = $('bpmVal');
 
@@ -734,6 +767,42 @@
     src.stop(t + 0.22);
   }
 
+  // 星が光るときの「キラン」。k 番目の星ほど少し高くする
+  function kiranSound(k = 0) {
+    const t = ctx.currentTime + 0.01, m = Math.pow(2, k / 12 * 2);
+    blip(t, ctx.destination, { f0: 1568 * m, v: 0.25, dur: 0.12 });
+    blip(t + 0.07, ctx.destination, { f0: 2349 * m, v: 0.22, dur: 0.35 });
+    blip(t + 0.07, ctx.destination, { f0: 2349 * m * 2.76, v: 0.06, dur: 0.15 });
+  }
+
+  // 結果発表のドラムロール
+  function drumroll(dur) {
+    const t0 = ctx.currentTime + 0.02;
+    for (let t = 0; t < dur; t += 0.045) {
+      const src = ctx.createBufferSource();
+      src.buffer = noiseBuf;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 0.7;
+      const g = ctx.createGain();
+      const v = 0.08 + 0.25 * (t / dur);
+      g.gain.setValueAtTime(0.0001, t0 + t);
+      g.gain.exponentialRampToValueAtTime(v, t0 + t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + t + 0.04);
+      src.connect(bp).connect(g).connect(ctx.destination);
+      src.start(t0 + t, Math.random() * 0.5); src.stop(t0 + t + 0.05);
+    }
+  }
+
+  // 結果発表のファンファーレ（ド・ミ・ソ・ド）
+  function fanfare() {
+    const t = ctx.currentTime + 0.02;
+    [523, 659, 784, 1047].forEach((f, k) => {
+      const last = k === 3;
+      blip(t + k * 0.12, ctx.destination, { type: 'triangle', f0: f, v: 0.35, dur: last ? 0.6 : 0.14 });
+      blip(t + k * 0.12, ctx.destination, { type: 'square', f0: f, v: 0.06, dur: last ? 0.5 : 0.12 });
+    });
+  }
+
   // ===== たたいて判定・点数・星 =====
   // ずれ（秒）がこの範囲なら、その判定。最後はたたかなかった音符。
   const GRADES = [
@@ -750,14 +819,28 @@
 
   let game = { score: 0, max: 0, lit: 0, judged: new Set() };
 
+  const STAR_SVG = '<svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
   function buildStars() {
-    for (let i = 0; i < 5; i++) {
-      const el = document.createElement('span');
-      el.className = 'star';
-      el.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
-      starsEl.appendChild(el);
+    for (const box of [starsEl, resStars]) {
+      for (let i = 0; i < 5; i++) {
+        const el = document.createElement('span');
+        el.className = 'star';
+        el.innerHTML = STAR_SVG;
+        box.appendChild(el);
+      }
     }
   }
+
+  function kiranStar(el) {
+    el.classList.add('lit');
+    el.classList.remove('kiran');
+    void el.offsetWidth;
+    el.classList.add('kiran');
+  }
+
+  // 100 点満点の点数と ☆ の数。☆ は 20・40・60・80 点で 1〜4 つ、95 点以上で 5 つ
+  function percent() { return game.max ? Math.round(Math.max(0, game.score) / game.max * 100) : 0; }
+  function starCount(pct) { return pct >= 95 ? 5 : Math.min(4, Math.floor(pct / 20)); }
 
   function resetGame() {
     const hits = state.notes.filter((n) => !TYPES[n.t].rest).length;
@@ -766,21 +849,53 @@
     updateScore();
   }
 
-  // 点数（100 点満点）と星（満点で 5 つ）を更新。新しく光った星はキランとさせる
+  // 点数と星を更新。新しく光った星はキランと光らせて音も鳴らす
   function updateScore() {
     if (game.max === 0) { pointsEl.textContent = '-- てん'; return; }
-    pointsEl.textContent = Math.round(game.score / game.max * 100) + ' てん';
-    const lit = Math.min(5, Math.floor(game.score * 5 / game.max + 1e-9));
+    const pct = percent(), lit = starCount(pct);
+    pointsEl.textContent = pct + ' てん';
     [...starsEl.children].forEach((el, i) => {
-      el.classList.toggle('lit', i < lit);
-      if (i >= game.lit && i < lit) {
-        el.classList.remove('kiran');
-        void el.offsetWidth;
-        el.classList.add('kiran');
-      }
+      if (i >= game.lit && i < lit) kiranStar(el);
+      else el.classList.toggle('lit', i < lit);
     });
+    if (lit > game.lit && ctx) kiranSound(lit - 1);
     game.lit = lit;
   }
+
+  // ===== けっか はっぴょう =====
+  const RESULT_MSG = [
+    'スペースキーで リズムを うってみよう！',
+    'つぎは もっと できるよ！',
+    'がんばったね！',
+    'いいね！ そのちょうし！',
+    'すごい！ あと すこしで パーフェクト！',
+    'パーフェクト！ すばらしい！',
+  ];
+  let resultTimers = [];
+  function showResult() {
+    closeResult();
+    const pct = percent(), n = starCount(pct);
+    for (const el of resStars.children) el.classList.remove('lit', 'kiran');
+    resText.innerHTML = '';
+    resultEl.classList.add('show');
+    const ROLL = 1.2, STEP = 0.45;
+    drumroll(ROLL);
+    const later = (sec, fn) => resultTimers.push(setTimeout(fn, sec * 1000));
+    for (let i = 0; i < n; i++) {
+      later(ROLL + 0.1 + i * STEP, () => { kiranStar(resStars.children[i]); kiranSound(i); });
+    }
+    later(ROLL + 0.3 + n * STEP, () => {
+      resText.innerHTML = `<div class="big">★ ${n}つ！</div><div class="pts">${pct} てん</div><div class="msg">${RESULT_MSG[n]}</div>`;
+      if (n > 0) fanfare();
+    });
+  }
+  function closeResult() {
+    resultTimers.forEach(clearTimeout);
+    resultTimers = [];
+    resultEl.classList.remove('show');
+  }
+  resClose.addEventListener('click', closeResult);
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeResult(); });
 
   function showJudge(g) {
     stage.querySelectorAll('.judge').forEach((el) => el.remove());
@@ -805,6 +920,7 @@
     const s = session;
     const late = Math.max(0, (performance.now() - ev.timeStamp) / 1000);  // 入力から処理までの遅れ
     const now = ctx.currentTime - late - s.lat;
+    clap(ctx.currentTime, ctx.destination);    // たたいた音
     if (now < s.time(s.R) - HIT_WIN) return;   // カウント中は数えない
     let best = null, bestD = Infinity;
     for (const n of state.notes) {
@@ -825,6 +941,7 @@
   let starting = false;
   async function play() {
     if (mode === 'playing' || starting) return;
+    closeResult();
     if (drag) finishDrag();
     starting = true;
     btnPlay.disabled = true;
@@ -901,7 +1018,11 @@
       if (!TYPES[n.t].rest && !game.judged.has(n.id) && st >= s.R && now > s.time(st) + HIT_WIN) judgeNote(n, MISS);
     }
 
-    if (ctx.currentTime >= s.time(TOTAL) + 1) { stop(); return; }
+    if (ctx.currentTime >= s.time(TOTAL) + 1) {
+      stop();
+      if (game.max > 0) showResult();   // 最後まで演奏したら結果発表
+      return;
+    }
     s.raf = requestAnimationFrame(frame);
   }
 

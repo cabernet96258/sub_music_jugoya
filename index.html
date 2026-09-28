@@ -133,7 +133,7 @@
   #resStars { display: flex; justify-content: center; gap: 10px; margin: 6px 0 12px; }
   #resStars .star { width: 72px; height: 72px; }
   #resStars .star::after { font-size: 28px; top: -14px; right: -12px; }
-  #resText { min-height: 96px; }
+  #resText { min-height: 140px; }
   #resText .big { font-size: 40px; font-weight: 900; color: #f9a825; -webkit-text-stroke: 1px #e65100; }
   #resText .pts { font-size: 22px; font-weight: bold; color: var(--muted); margin-top: 2px; }
   #resText .msg { font-size: 24px; font-weight: bold; color: #e91e63; margin-top: 6px; }
@@ -283,7 +283,53 @@
   }
   #trash svg { width: 44px; height: 44px; }
   #trash.active { border-color: var(--ng); color: var(--ng); background: #ffebee; }
-  body.playmode #palette, body.pausemode #palette { opacity: .4; pointer-events: none; }
+  body.playmode #palette, body.pausemode #palette,
+  body.playmode #ranking, body.pausemode #ranking { opacity: .4; pointer-events: none; }
+
+  /* ---------- じぶんランキング ---------- */
+  #ranking {
+    background: var(--panel); border-radius: 14px; padding: 8px 14px 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  }
+  #ranking .head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  #ranking h2 { margin: 0; font-size: 18px; color: #b8860b; }
+  #rankHint { font-size: 14px; color: var(--muted); font-weight: bold; }
+  #rankClear { margin-left: auto; font-size: 13px; min-height: 32px; padding: 4px 12px; background: #fff; border: 2px solid #ddd; color: #999; }
+  #rankList { list-style: none; margin: 0; padding: 0; display: flex; gap: 10px; }
+  #rankList li {
+    position: relative; flex: 1; min-width: 0; height: 84px; border-radius: 12px;
+    display: grid; grid-template-columns: 46px 1fr; grid-template-rows: auto auto auto; column-gap: 6px;
+    align-items: center; padding: 6px 10px; background: #faf7f0; border: 3px solid #eee3cf;
+  }
+  #rankList li .medal { grid-row: 1 / 4; font-size: 34px; text-align: center; line-height: 1; }
+  #rankList li .medal small { display: block; font-size: 15px; font-weight: 900; color: var(--muted); }
+  #rankList li .pts { font-size: 24px; font-weight: 900; color: var(--accent); line-height: 1.1; white-space: nowrap; }
+  #rankList li .pts .st { font-size: 14px; color: #f9a825; margin-left: 4px; letter-spacing: -1px; }
+  #rankList li .ttl { font-size: 13px; font-weight: bold; color: #6d4c41; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #rankList li .meta { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  #rankList li.r1 { background: linear-gradient(135deg, #fff8d6, #ffecb3); border-color: #ffca28; }
+  #rankList li.r2 { background: linear-gradient(135deg, #f7f9fa, #e3e8ec); border-color: #b0bec5; }
+  #rankList li.r3 { background: linear-gradient(135deg, #fff3ea, #f6dcc8); border-color: #d7a07a; }
+  #rankList li.r1 .medal { animation: crown 2.4s ease-in-out infinite; }
+  @keyframes crown { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg) scale(1.08); } }
+  #rankList li.empty { background: #fcfcfc; border-style: dashed; color: #bbb; }
+  #rankList li.empty .pts { color: #ccc; font-size: 18px; }
+  #rankList li.new { animation: newGlow 1.2s ease-in-out 4; }
+  @keyframes newGlow { 0%, 100% { box-shadow: 0 0 0 rgba(255,64,160,0); } 50% { box-shadow: 0 0 16px 4px rgba(255,64,160,.6); } }
+  #rankList li .newb {
+    position: absolute; top: -10px; right: -6px; background: #ff2d8a; color: #fff; font-size: 12px; font-weight: 900;
+    padding: 2px 7px; border-radius: 10px; transform: rotate(8deg); animation: bounce .8s ease-in-out infinite;
+  }
+  @keyframes bounce { 0%, 100% { transform: rotate(8deg) translateY(0); } 50% { transform: rotate(8deg) translateY(-4px); } }
+
+  /* 結果発表のランキング行と紙吹雪 */
+  #resText .rank { font-size: 26px; font-weight: 900; margin-top: 8px; }
+  #resText .rank.top { color: #e65100; animation: boxIn .5s ease-out, shine 1s ease-in-out .5s 3; }
+  #resText .rank.in { color: #d81b60; }
+  #resText .rank.out { color: #5c6bc0; font-size: 20px; }
+  @keyframes shine { 0%, 100% { text-shadow: 0 0 0 #fff176; } 50% { text-shadow: 0 0 14px #ffd600; } }
+  .confetti { position: fixed; top: -20px; z-index: 3000; width: 10px; height: 14px; pointer-events: none; animation: fall linear forwards; }
+  @keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
   body.playmode #band, body.pausemode #band { pointer-events: none; }
 
   @media (max-width: 900px) {
@@ -334,6 +380,15 @@
     </div>
   </div>
 
+  <section id="ranking">
+    <div class="head">
+      <h2>🏆 じぶんランキング</h2>
+      <span id="rankHint">おてほん OFF で さいごまで えんそうすると きろくが のこるよ</span>
+      <button id="rankClear" type="button">ランキングをけす</button>
+    </div>
+    <ol id="rankList"></ol>
+  </section>
+
   <div id="result" role="dialog" aria-label="けっか はっぴょう">
     <div class="box">
       <h2>けっか はっぴょう！</h2>
@@ -369,10 +424,11 @@
     er: { dur: 1, label: 'ウ',   name: 'はちぶきゅうふ',    rest: true },
   };
   const PALETTE = ['q', 'e', 'ee', 'h', 'qr', 'er'];
+  const RANK_SIZE = 5;
   const SOUND_KEYS = ['poko', 'piyo', 'piko', 'kira', 'pettan', 'wood'];
 
   // ===== 状態 =====
-  const state = { notes: [], bpm: 80, otehon: false, sound: 'poko' };
+  const state = { notes: [], bpm: 80, otehon: false, sound: 'poko', ranking: [] };
   let nextId = 1;
   let mode = 'edit';            // 'edit' | 'playing' | 'paused'
   let pausedE = 0;
@@ -388,6 +444,7 @@
         mmNotes = $('mmNotes'), mmWindow = $('mmWindow'), mmHead = $('mmHead'), minimap = $('minimap'),
         cardsEl = $('cards'), trash = $('trash'), stage = $('stage'), starsEl = $('stars'), pointsEl = $('points'),
         resultEl = $('result'), resStars = $('resStars'), resText = $('resText'), resClose = $('resClose'),
+        rankList = $('rankList'), rankClear = $('rankClear'),
         btnPlay = $('btnPlay'), btnPause = $('btnPause'), btnStop = $('btnStop'),
         btnOtehon = $('btnOtehon'), soundSel = $('sound'), btnClear = $('btnClear'), bpmInput = $('bpm'), bpmVal = $('bpmVal');
 
@@ -399,6 +456,12 @@
     if (Number.isFinite(saved.bpm)) state.bpm = Math.min(120, Math.max(60, Math.round(saved.bpm)));
     state.otehon = !!saved.otehon;
     if (typeof saved.sound === 'string' && SOUND_KEYS.includes(saved.sound)) state.sound = saved.sound;
+    if (Array.isArray(saved.ranking)) {
+      state.ranking = saved.ranking
+        .filter((r) => r && Number.isFinite(r.pct) && Number.isFinite(r.bpm) && typeof r.date === 'string')
+        .map((r) => ({ pct: Math.min(100, Math.max(0, Math.round(r.pct))), bpm: Math.round(r.bpm), date: r.date }))
+        .slice(0, RANK_SIZE);
+    }
     if (Array.isArray(saved.notes)) {
       for (const n of saved.notes) {
         if (!n || !TYPES[n.t] || n.t === 'ee') continue;
@@ -413,7 +476,7 @@
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         notes: state.notes.map((n) => ({ m: n.m, p: n.p, t: n.t })),
-        bpm: state.bpm, otehon: state.otehon, sound: state.sound,
+        bpm: state.bpm, otehon: state.otehon, sound: state.sound, ranking: state.ranking,
       }));
     } catch (_) { /* 保存できない環境でも動作は続ける */ }
   }
@@ -910,10 +973,98 @@
     'すごい！ あと すこしで パーフェクト！',
     'パーフェクト！ すばらしい！',
   ];
+  // ===== じぶんランキング =====
+  const TITLES = [
+    [100, 'リズムめいじん'],
+    [95,  'リズムマスター'],
+    [80,  'リズムの たつじん'],
+    [60,  'リズムの なかま'],
+    [40,  'リズムの みならい'],
+    [0,   'リズムの たまご'],
+  ];
+  const titleOf = (pct) => TITLES.find(([min]) => pct >= min)[1];
+  const MEDALS = ['🥇', '🥈', '🥉'];
+  let newRankDate = null;   // さっき入った記録（NEW! を付ける）
+
+  // 点数の高い順。同じ点数ならテンポが速いほう、それも同じなら新しいほうが上
+  function compareRecord(a, b) {
+    return b.pct - a.pct || b.bpm - a.bpm || (a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+  }
+  // 記録を追加して、入った順位（0 始まり）を返す。ランク外なら -1
+  function addRecord(pct) {
+    const rec = { pct, bpm: state.bpm, date: new Date().toISOString() };
+    const list = [...state.ranking, rec].sort(compareRecord).slice(0, RANK_SIZE);
+    const rank = list.indexOf(rec);
+    state.ranking = list;
+    if (rank >= 0) newRankDate = rec.date;
+    save();
+    renderRanking();
+    return rank;
+  }
+
+  function fmtDate(iso) {
+    const d = new Date(iso);
+    const pad = (x) => String(x).padStart(2, '0');
+    return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${pad(d.getMinutes())}`;
+  }
+
+  function renderRanking() {
+    rankList.innerHTML = '';
+    for (let i = 0; i < RANK_SIZE; i++) {
+      const r = state.ranking[i];
+      const li = document.createElement('li');
+      const medal = i === 0 && r ? '👑' : (MEDALS[i] || '');
+      const place = `<small>${i + 1}い</small>`;
+      if (!r) {
+        li.className = 'empty';
+        li.innerHTML = `<div class="medal">${place}</div><div class="pts">まだ ないよ</div>`;
+      } else {
+        li.className = 'r' + (i + 1) + (r.date === newRankDate ? ' new' : '');
+        li.innerHTML = `<div class="medal">${medal}${place}</div>` +
+          `<div class="pts">${r.pct}<span style="font-size:14px">てん</span><span class="st">${'★'.repeat(starCount(r.pct))}</span></div>` +
+          `<div class="ttl">${titleOf(r.pct)}</div>` +
+          `<div class="meta">テンポ ${r.bpm} ・ ${fmtDate(r.date)}</div>` +
+          (r.date === newRankDate ? '<span class="newb">NEW!</span>' : '');
+      }
+      rankList.appendChild(li);
+    }
+  }
+
+  function confetti() {
+    const colors = ['#ff4081', '#ffd600', '#40c4ff', '#69f0ae', '#ff9100', '#b388ff'];
+    for (let i = 0; i < 70; i++) {
+      const c = document.createElement('div');
+      c.className = 'confetti';
+      c.style.left = (Math.random() * 100) + 'vw';
+      c.style.background = colors[i % colors.length];
+      c.style.animationDuration = (2 + Math.random() * 2) + 's';
+      c.style.animationDelay = (Math.random() * 0.8) + 's';
+      c.style.borderRadius = Math.random() < 0.4 ? '50%' : '2px';
+      c.addEventListener('animationend', () => c.remove());
+      document.body.appendChild(c);
+    }
+  }
+
+  rankClear.addEventListener('click', () => {
+    if (state.ranking.length === 0) return;
+    if (!confirm('ランキングを ぜんぶ けしても いいですか？')) return;
+    state.ranking = [];
+    newRankDate = null;
+    save(); renderRanking();
+  });
+
+  // ===== けっか はっぴょう =====
   let resultTimers = [];
   function showResult() {
     closeResult();
     const pct = percent(), n = starCount(pct);
+    const hadBefore = state.ranking.length > 0;
+    const prevLast = state.ranking.length >= RANK_SIZE ? state.ranking[RANK_SIZE - 1].pct : null;
+    const rank = addRecord(pct);
+    let rankLine;
+    if (rank === 0) rankLine = `<div class="rank top">👑 ${hadBefore ? 'じこベスト こうしん！' : 'はじめての きろく！ 1い！'}</div>`;
+    else if (rank > 0) rankLine = `<div class="rank in">🎉 ${rank + 1}いに ランクイン！</div>`;
+    else rankLine = `<div class="rank out">5いまで あと ${Math.max(1, prevLast - pct)}てん！ がんばろう！</div>`;
     for (const el of resStars.children) el.classList.remove('lit', 'kiran');
     resText.innerHTML = '';
     resultEl.classList.add('show');
@@ -924,8 +1075,13 @@
       later(ROLL + 0.1 + i * STEP, () => { kiranStar(resStars.children[i]); kiranSound(i); });
     }
     later(ROLL + 0.3 + n * STEP, () => {
-      resText.innerHTML = `<div class="big">★ ${n}つ！</div><div class="pts">${pct} てん</div><div class="msg">${RESULT_MSG[n]}</div>`;
+      resText.innerHTML = `<div class="big">★ ${n}つ！</div><div class="pts">${pct} てん ・ ${titleOf(pct)}</div><div class="msg">${RESULT_MSG[n]}</div>`;
       if (n > 0) fanfare();
+    });
+    later(ROLL + 1.1 + n * STEP, () => {
+      resText.insertAdjacentHTML('beforeend', rankLine);
+      if (rank >= 0) { kiranSound(2); kiranSound(4); }
+      if (rank === 0 || n === 5) confetti();
     });
   }
   function closeResult() {
@@ -1197,6 +1353,7 @@
   buildMinimap();
   buildPalette();
   buildStars();
+  renderRanking();
   renderSettings();
   renderNotes();
   updateButtons();

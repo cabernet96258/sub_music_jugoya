@@ -227,6 +227,12 @@
   }
   .card.rest.sounding { transform: scale(.78); opacity: .65; background: #d0d7de; border-color: #8a96a3; }
 
+  .gap {
+    position: absolute; top: 50px; height: 124px; z-index: 3; pointer-events: none; border-radius: 10px;
+    background: rgba(229,57,53,.18); border: 3px dashed var(--ng);
+    animation: gapBlink .5s ease-in-out 6 alternate forwards;
+  }
+  @keyframes gapBlink { from { opacity: 1; } to { opacity: .25; } }
   #hint { position: absolute; top: 50px; height: 124px; border-radius: 10px; pointer-events: none; display: none; z-index: 3; }
   #hint.ok { display: block; background: rgba(76,175,80,.18); border: 3px dashed var(--ok); }
   #hint.ng { display: block; background: rgba(229,57,53,.22); border: 3px solid var(--ng); }
@@ -1154,9 +1160,34 @@
   }
 
   // ===== 再生 =====
+  // 音符・休符が置かれていないマス（八分音符単位の通し番号）
+  function emptySlots() {
+    const used = new Array(TOTAL).fill(false);
+    for (const n of state.notes) for (let k = 0; k < TYPES[n.t].dur; k++) used[startOf(n) + k] = true;
+    return used.flatMap((u, i) => (u ? [] : [i]));
+  }
+  // 空いているマスを赤く点滅させて知らせる
+  function showGaps(gaps) {
+    band.querySelectorAll('.gap').forEach((el) => el.remove());
+    for (const i of gaps) {
+      const g = document.createElement('div');
+      g.className = 'gap';
+      g.style.left = (PAD + i * SLOT + 2) + 'px';
+      g.style.width = (SLOT - 4) + 'px';
+      g.addEventListener('animationend', () => g.remove());
+      band.appendChild(g);
+    }
+    viewport.scrollLeft = PAD + gaps[0] * SLOT - 80;
+    toast('⚠️ あいているところが あるよ！ おんぷか きゅうふを おいてね');
+  }
+
   let starting = false;
   async function play() {
     if (mode === 'playing' || starting) return;
+    if (mode === 'edit') {
+      const gaps = emptySlots();
+      if (gaps.length) { showGaps(gaps); return; }
+    }
     closeResult();
     if (drag) finishDrag();
     starting = true;

@@ -248,13 +248,9 @@
   body.playmode #zones { display: block; }
   .hz {
     position: absolute; top: 50px; height: 124px; z-index: 4; pointer-events: none;
-    background: rgba(255,64,160,.28);
-    border-left: 2px solid rgba(255,45,138,.9); border-right: 2px solid rgba(255,45,138,.9);
+    background: rgba(255,64,160,.12);
+    border-left: 1px solid rgba(255,45,138,.35); border-right: 1px solid rgba(255,45,138,.35);
     transition: opacity .25s;
-  }
-  .hz::before {   /* 真ん中＝ぴったりのタイミング */
-    content: ""; position: absolute; top: 0; bottom: 0; left: 50%; margin-left: -1px;
-    border-left: 2px dashed rgba(255,45,138,.9);
   }
   .hz::after {
     content: "💮"; position: absolute; top: -18px; left: 50%; transform: translateX(-50%);

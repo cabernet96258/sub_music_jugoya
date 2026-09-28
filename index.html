@@ -737,16 +737,16 @@
   // ===== たたいて判定・点数・星 =====
   // ずれ（秒）がこの範囲なら、その判定。最後はたたかなかった音符。
   const GRADES = [
-    { win: 0.05,     mk: '💮', wd: 'はなまる！', pts: 100, color: '#e91e63' },
-    { win: 0.09,     mk: '◎',  wd: 'すごい！',   pts: 80,  color: '#e53935' },
-    { win: 0.13,     mk: '○',  wd: 'いいね',     pts: 60,  color: '#fb8c00' },
-    { win: 0.18,     mk: '△',  wd: 'おしい',     pts: 30,  color: '#1e88e5' },
+    { win: 0.09,     mk: '💮', wd: 'はなまる！', pts: 100, color: '#e91e63' },
+    { win: 0.15,     mk: '◎',  wd: 'すごい！',   pts: 80,  color: '#e53935' },
+    { win: 0.21,     mk: '○',  wd: 'いいね',     pts: 60,  color: '#fb8c00' },
+    { win: 0.28,     mk: '△',  wd: 'おしい',     pts: 40,  color: '#1e88e5' },
     { win: Infinity, mk: '✓',  wd: 'ざんねん',   pts: 0,   color: '#78909c' },
   ];
-  const HIT_WIN = 0.18;
+  const HIT_WIN = 0.28;
   const MISS = GRADES.length - 1;
   const STRAY = { mk: '✓', wd: 'たたきすぎ', color: '#78909c' };
-  const STRAY_PENALTY = 30;     // 休符や何もないところでたたいたときの減点
+  const STRAY_PENALTY = 20;     // 休符や何もないところでたたいたときの減点
 
   let game = { score: 0, max: 0, lit: 0, judged: new Set() };
 

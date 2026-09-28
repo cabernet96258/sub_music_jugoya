@@ -240,6 +240,27 @@
     border: 12px solid transparent; border-top: 14px solid var(--playbar); border-bottom: 0;
   }
   body.playmode #playbar { display: block; }
+  #playbar.inzone { background: #ff2d8a; box-shadow: 0 0 14px 4px rgba(255,45,138,.75); }
+  #playbar.inzone::before { border-top-color: #ff2d8a; }
+
+  /* はなまるになるタイミングの範囲（再生中・一時停止中だけ表示） */
+  #zones { display: none; }
+  body.playmode #zones { display: block; }
+  .hz {
+    position: absolute; top: 50px; height: 124px; z-index: 4; pointer-events: none;
+    background: rgba(255,64,160,.28);
+    border-left: 2px solid rgba(255,45,138,.9); border-right: 2px solid rgba(255,45,138,.9);
+    transition: opacity .25s;
+  }
+  .hz::before {   /* 真ん中＝ぴったりのタイミング */
+    content: ""; position: absolute; top: 0; bottom: 0; left: 50%; margin-left: -1px;
+    border-left: 2px dashed rgba(255,45,138,.9);
+  }
+  .hz::after {
+    content: "💮"; position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
+    font-size: 16px; line-height: 1;
+  }
+  .hz.done { opacity: 0; }
   #count {
     position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
     font-size: 150px; font-weight: 900; color: var(--accent); z-index: 20; pointer-events: none;
@@ -302,7 +323,7 @@
   </div>
 
   <div id="stage">
-    <div id="viewport"><div id="band"><div id="measures"></div><div id="notes"></div><div id="hint"></div></div></div>
+    <div id="viewport"><div id="band"><div id="measures"></div><div id="notes"></div><div id="zones"></div><div id="hint"></div></div></div>
     <div id="playbar"></div>
     <div id="count"><span></span></div>
   </div>
@@ -362,11 +383,12 @@
   let session = null;
   let drag = null;
   const noteEls = new Map();
+  const zoneEls = new Map();
 
   // ===== 要素 =====
   const $ = (id) => document.getElementById(id);
   const viewport = $('viewport'), band = $('band'), measuresEl = $('measures'), notesEl = $('notes'),
-        hint = $('hint'), countEl = $('count'), countSpan = countEl.querySelector('span'),
+        hint = $('hint'), zonesEl = $('zones'), playbar = $('playbar'), countEl = $('count'), countSpan = countEl.querySelector('span'),
         mmNotes = $('mmNotes'), mmWindow = $('mmWindow'), mmHead = $('mmHead'), minimap = $('minimap'),
         cardsEl = $('cards'), trash = $('trash'), stage = $('stage'), starsEl = $('stars'), pointsEl = $('points'),
         resultEl = $('result'), resStars = $('resStars'), resText = $('resText'), resClose = $('resClose'),
@@ -496,7 +518,24 @@
       notesEl.appendChild(el);
       noteEls.set(n.id, el);
     }
+    renderZones();
     renderMinimap();
+  }
+
+  // 音符ごとに「はなまる」になる範囲をピンクの帯で示す。幅はテンポで変わる
+  function renderZones() {
+    zonesEl.innerHTML = '';
+    zoneEls.clear();
+    const half = GRADES[0].win / (30 / state.bpm) * SLOT;   // 秒 → px
+    for (const n of state.notes) {
+      if (TYPES[n.t].rest) continue;
+      const z = document.createElement('div');
+      z.className = 'hz';
+      z.style.left = (PAD + startOf(n) * SLOT - half) + 'px';
+      z.style.width = (half * 2) + 'px';
+      zonesEl.appendChild(z);
+      zoneEls.set(n.id, z);
+    }
   }
 
   function buildPalette() {
@@ -845,6 +884,7 @@
   function resetGame() {
     const hits = state.notes.filter((n) => !TYPES[n.t].rest).length;
     game = { score: 0, max: hits * 100, lit: 0, judged: new Set() };
+    renderZones();
     for (const el of starsEl.children) el.classList.remove('lit', 'kiran');
     updateScore();
   }
@@ -909,6 +949,8 @@
 
   function judgeNote(n, gi, show = true) {
     game.judged.add(n.id);
+    const z = zoneEls.get(n.id);
+    if (z) z.classList.add('done');
     game.score += GRADES[gi].pts;
     if (show) showJudge(GRADES[gi]);
     updateScore();
@@ -1018,6 +1060,14 @@
       if (!TYPES[n.t].rest && !game.judged.has(n.id) && st >= s.R && now > s.time(st) + HIT_WIN) judgeNote(n, MISS);
     }
 
+    // バーがはなまるの範囲に入っている間はバーもピンクに光らせる
+    let inZone = false;
+    for (const n of state.notes) {
+      if (TYPES[n.t].rest || game.judged.has(n.id) || startOf(n) < s.R) continue;
+      if (Math.abs(now - s.time(startOf(n))) <= GRADES[0].win) { inZone = true; break; }
+    }
+    playbar.classList.toggle('inzone', inZone);
+
     if (ctx.currentTime >= s.time(TOTAL) + 1) {
       stop();
       if (game.max > 0) showResult();   // 最後まで演奏したら結果発表
@@ -1064,6 +1114,7 @@
     }
     endSession();
     mode = 'paused';
+    playbar.classList.remove('inzone');
     document.body.classList.add('pausemode');
     for (const el of noteEls.values()) el.classList.remove('pop');
     updateButtons();
@@ -1071,6 +1122,7 @@
 
   function stop() {
     endSession();
+    playbar.classList.remove('inzone');
     mode = 'edit';
     pausedE = 0;
     document.body.classList.remove('playmode', 'pausemode');

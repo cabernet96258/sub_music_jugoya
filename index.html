@@ -132,7 +132,6 @@
     position: fixed; z-index: 1000; pointer-events: none; opacity: .92;
     box-shadow: 0 8px 18px rgba(0,0,0,.25); transform: scale(1.04);
   }
-  .beam { position: absolute; height: 6px; background: #222; top: 70px; pointer-events: none; z-index: 2; }
   .card.pop { animation: pop .25s ease-out; z-index: 5; }
   @keyframes pop {
     0% { transform: scale(1); }
@@ -239,7 +238,6 @@
   const TOTAL = NM * 4;         // 全体の八分音符マス数
   const PAD = 24;               // 帯の左右の余白
   const CARD_INSET = 3;         // マスとカードのすき間
-  const STEM_X = CARD_INSET + 4 + 22.8; // マス左端から符幹までの距離
   const STORE_KEY = 'jugoya-rhythm-v1';
 
   const LYRICS = ['じゅうごやさんの', 'もちつきは', 'トーントーン', 'トッテッタ',
@@ -320,20 +318,19 @@
 
   // 同じ小節で隣り合う八分音符を、左から順に 2 つずつ連桁にする
   function computeBeams() {
-    const roles = new Map(), pairs = [];
+    const roles = new Map();
     for (let m = 0; m < NM; m++) {
       const es = state.notes.filter((n) => n.m === m && n.t === 'e').sort((a, b) => a.p - b.p);
       for (let i = 0; i < es.length;) {
         if (i + 1 < es.length && es[i + 1].p === es[i].p + 1) {
           roles.set(es[i].id, 'L'); roles.set(es[i + 1].id, 'R');
-          pairs.push([es[i], es[i + 1]]);
           i += 2;
         } else {
           i += 1;
         }
       }
     }
-    return { roles, pairs };
+    return { roles };
   }
 
   // ===== 音符の SVG =====
@@ -343,11 +340,16 @@
   const STEM = (x) => `<rect x="${x}" y="12" width="2.4" height="44" fill="currentColor"/>`;
   const FLAG = '<path d="M25.2 12 C25.5 22 36.5 25 34.5 39 C34 42 33 45 31.5 47 C33.5 37 30 30 25.2 28 Z" fill="currentColor"/>';
 
-  function symbolSVG(type, beamed) {
+  // 連桁は左右どちらのカードにも同じ横棒を描く（光って前面に出ても消えないように）
+  // L: 自分の符幹から右隣の符幹まで、R: 左隣の符幹から自分の符幹まで
+  const BEAM = { L: '<rect x="22.8" y="12" width="62.4" height="6" fill="currentColor"/>',
+                 R: '<rect x="-37.2" y="12" width="62.4" height="6" fill="currentColor"/>' };
+
+  function symbolSVG(type, beam) {
     switch (type) {
       case 'q':  return `<svg class="sym" viewBox="0 0 40 70">${HEAD(16, true)}${STEM(22.8)}</svg>`;
       case 'h':  return `<svg class="sym" viewBox="0 0 40 70">${HEAD(16, false)}${STEM(22.8)}</svg>`;
-      case 'e':  return `<svg class="sym" viewBox="0 0 40 70">${HEAD(16, true)}${STEM(22.8)}${beamed ? '' : FLAG}</svg>`;
+      case 'e':  return `<svg class="sym" viewBox="0 0 40 70">${HEAD(16, true)}${STEM(22.8)}${beam ? BEAM[beam] : FLAG}</svg>`;
       case 'ee': return `<svg class="sym" viewBox="0 0 100 70">${HEAD(16, true)}${STEM(22.8)}${HEAD(76, true)}${STEM(82.8)}<rect x="22.8" y="12" width="62.4" height="6" fill="currentColor"/></svg>`;
       case 'qr': return '<svg class="sym" viewBox="0 0 40 70"><path d="M14 10 L25 24 L17 35 L27 48 C19 44 14 50 21 60" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"/></svg>';
       case 'er': return '<svg class="sym" viewBox="0 0 40 70"><circle cx="14" cy="28" r="4.8" fill="currentColor"/><path d="M14 31 C19 35 25 32 29 25 L20 58" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -362,7 +364,7 @@
     el.style.width = (def.dur * SLOT - CARD_INSET * 2) + 'px';
     const showLen = def.dur >= 2 && type !== 'ee';
     const lbl = type === 'ee' ? 'タ<span style="display:inline-block;width:41px"></span>タ' : def.label;
-    el.innerHTML = symbolSVG(type, opts.beamed) + (showLen ? '<div class="len"></div>' : '') +
+    el.innerHTML = symbolSVG(type, opts.beam) + (showLen ? '<div class="len"></div>' : '') +
       `<div class="lbl">${lbl}</div>` + (opts.name ? `<div class="nm">${def.name}</div>` : '');
     return el;
   }
@@ -383,28 +385,21 @@
   function renderNotes() {
     notesEl.innerHTML = '';
     noteEls.clear();
-    const { roles, pairs } = computeBeams();
+    const { roles } = computeBeams();
     for (const n of state.notes) {
-      const el = makeCard(n.t, { beamed: roles.has(n.id) });
+      const el = makeCard(n.t, { beam: roles.get(n.id) });
       el.classList.add('placed');
       el.style.left = (PAD + startOf(n) * SLOT + CARD_INSET) + 'px';
       el.addEventListener('pointerdown', (ev) => startDrag(ev, { from: 'band', id: n.id, type: n.t }));
       notesEl.appendChild(el);
       noteEls.set(n.id, el);
     }
-    for (const [a] of pairs) {
-      const b = document.createElement('div');
-      b.className = 'beam';
-      b.style.left = (PAD + startOf(a) * SLOT + STEM_X) + 'px';
-      b.style.width = (SLOT + 2.4) + 'px';
-      notesEl.appendChild(b);
-    }
     renderMinimap();
   }
 
   function buildPalette() {
     for (const type of PALETTE) {
-      const el = makeCard(type, { name: true, beamed: false });
+      const el = makeCard(type, { name: true });
       el.addEventListener('pointerdown', (ev) => startDrag(ev, { from: 'palette', type }));
       cardsEl.insertBefore(el, trash);
     }
@@ -460,7 +455,7 @@
     ev.preventDefault();
     const srcEl = ev.currentTarget;
     const r = srcEl.getBoundingClientRect();
-    const ghost = makeCard(src.type, { beamed: false });
+    const ghost = makeCard(src.type);
     ghost.classList.add('ghost');
     document.body.appendChild(ghost);
     drag = {

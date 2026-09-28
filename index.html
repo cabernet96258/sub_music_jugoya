@@ -42,7 +42,7 @@
 
   /* ---------- コントロール ---------- */
   #controls {
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     background: var(--panel); border-radius: 14px; padding: 8px 12px;
     box-shadow: 0 1px 4px rgba(0,0,0,.08);
   }
@@ -61,7 +61,13 @@
   #btnClear { background: #fff; border-color: #ccc; font-size: 15px; margin-left: auto; }
   .sep { width: 2px; height: 36px; background: var(--line); }
   .tempo { display: flex; align-items: center; gap: 8px; font-weight: bold; }
-  .tempo input { width: 200px; accent-color: var(--accent); }
+  .tempo input { width: 130px; accent-color: var(--accent); }
+  .sound { display: flex; align-items: center; gap: 8px; font-weight: bold; }
+  .sound select {
+    font: inherit; font-size: 17px; font-weight: bold; min-height: 48px; padding: 4px 8px;
+    border: 3px solid #9ccc65; border-radius: 12px; background: #f1f8e9; color: var(--ink); cursor: pointer;
+  }
+  .sound select:disabled { opacity: .35; cursor: not-allowed; }
   .tempo output { display: inline-block; min-width: 3ch; font-size: 26px; color: var(--accent); text-align: right; }
 
   /* ---------- ミニマップ ---------- */
@@ -210,6 +216,10 @@
     <div class="sep"></div>
     <button id="btnOtehon" type="button" aria-pressed="false">👏 おてほん OFF</button>
     <div class="sep"></div>
+    <label class="sound">おと
+      <select id="sound"></select>
+    </label>
+    <div class="sep"></div>
     <label class="tempo">テンポ
       <input id="bpm" type="range" min="60" max="120" step="1" value="80">
       <output id="bpmVal">80</output>
@@ -261,9 +271,10 @@
     er: { dur: 1, label: 'ウ',   name: 'はちぶきゅうふ',    rest: true },
   };
   const PALETTE = ['q', 'e', 'ee', 'h', 'qr', 'er'];
+  const SOUND_KEYS = ['poko', 'piyo', 'piko', 'kira', 'pettan', 'wood'];
 
   // ===== 状態 =====
-  const state = { notes: [], bpm: 80, otehon: false };
+  const state = { notes: [], bpm: 80, otehon: false, sound: 'poko' };
   let nextId = 1;
   let mode = 'edit';            // 'edit' | 'playing' | 'paused'
   let pausedE = 0;
@@ -278,7 +289,7 @@
         mmNotes = $('mmNotes'), mmWindow = $('mmWindow'), mmHead = $('mmHead'), minimap = $('minimap'),
         cardsEl = $('cards'), trash = $('trash'),
         btnPlay = $('btnPlay'), btnPause = $('btnPause'), btnStop = $('btnStop'),
-        btnOtehon = $('btnOtehon'), btnClear = $('btnClear'), bpmInput = $('bpm'), bpmVal = $('bpmVal');
+        btnOtehon = $('btnOtehon'), soundSel = $('sound'), btnClear = $('btnClear'), bpmInput = $('bpm'), bpmVal = $('bpmVal');
 
   // ===== 保存 =====
   function load() {
@@ -287,6 +298,7 @@
     if (!saved || typeof saved !== 'object') return;
     if (Number.isFinite(saved.bpm)) state.bpm = Math.min(120, Math.max(60, Math.round(saved.bpm)));
     state.otehon = !!saved.otehon;
+    if (typeof saved.sound === 'string' && SOUND_KEYS.includes(saved.sound)) state.sound = saved.sound;
     if (Array.isArray(saved.notes)) {
       for (const n of saved.notes) {
         if (!n || !TYPES[n.t] || n.t === 'ee') continue;
@@ -301,7 +313,7 @@
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         notes: state.notes.map((n) => ({ m: n.m, p: n.p, t: n.t })),
-        bpm: state.bpm, otehon: state.otehon,
+        bpm: state.bpm, otehon: state.otehon, sound: state.sound,
       }));
     } catch (_) { /* 保存できない環境でも動作は続ける */ }
   }
@@ -593,24 +605,65 @@
   // 最初に画面を触ったときに音の準備を始めておく（Chrome はユーザー操作の中でしか音を開始できない）
   window.addEventListener('pointerdown', initAudio, { once: true, capture: true });
 
-  // ウッドブロック風の「コッ」
+  // ===== テンポを刻む音（選べる） =====
+  // m: 音の高さの倍率、v: 音量
   const TICK = {
-    count:  { f: 1000, v: 0.7 },
-    high:   { f: 1600, v: 0.8 },
-    accent: { f: 1250, v: 0.32 },
-    beat:   { f: 1000, v: 0.2 },
+    count:  { m: 1,    v: 0.7 },   // 3, 2, 1
+    high:   { m: 1.5,  v: 0.8 },   // はい！
+    accent: { m: 1.25, v: 0.35 },  // 演奏中の 1 拍目
+    beat:   { m: 1,    v: 0.22 },  // 演奏中の 2 拍目
   };
+
+  // 高さが f0 から f1 へ glide 秒で変わる短い音
+  function blip(t, out, { type = 'sine', f0, f1 = f0, glide = 0.03, v, dur }) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + glide);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(v, t + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(out);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+
+  const VOICES = {
+    poko: { label: '🫧 ぽこぽこ', play(t, m, v, out) {
+      blip(t, out, { f0: 380 * m, f1: 900 * m, glide: 0.045, v, dur: 0.1 });
+    } },
+    piyo: { label: '🐤 ぴよぴよ', play(t, m, v, out) {
+      blip(t, out, { f0: 1900 * m, f1: 3000 * m, glide: 0.05, v: v * 0.6, dur: 0.07 });
+      blip(t + 0.075, out, { f0: 2100 * m, f1: 3200 * m, glide: 0.04, v: v * 0.45, dur: 0.06 });
+    } },
+    piko: { label: '🎮 ピコピコ', play(t, m, v, out) {
+      blip(t, out, { type: 'square', f0: 880 * m, v: v * 0.3, dur: 0.045 });
+      blip(t + 0.045, out, { type: 'square', f0: 1760 * m, v: v * 0.3, dur: 0.06 });
+    } },
+    kira: { label: '✨ きらきら', play(t, m, v, out) {
+      blip(t, out, { f0: 1320 * m, v: v * 0.7, dur: 0.35 });
+      blip(t, out, { f0: 1320 * m * 2.76, v: v * 0.2, dur: 0.15 });
+    } },
+    pettan: { label: '🍡 ぺったん', play(t, m, v, out) {
+      blip(t, out, { f0: 190 * m, f1: 70 * m, glide: 0.12, v, dur: 0.18 });
+      const src = ctx.createBufferSource();
+      src.buffer = noiseBuf;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = 900;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(v * 0.5, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+      src.connect(lp).connect(g).connect(out);
+      src.start(t, Math.random() * 0.5); src.stop(t + 0.07);
+    } },
+    wood: { label: '🪵 ウッドブロック', play(t, m, v, out) {
+      blip(t, out, { type: 'triangle', f0: 1150 * m, f1: 1000 * m, v, dur: 0.07 });
+    } },
+  };
+
   function tick(t, kind, out) {
     const k = TICK[kind];
-    const o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = 'triangle';
-    o.frequency.setValueAtTime(k.f * 1.15, t);
-    o.frequency.exponentialRampToValueAtTime(k.f, t + 0.03);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(k.v, t + 0.002);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
-    o.connect(g).connect(out);
-    o.start(t); o.stop(t + 0.09);
+    VOICES[state.sound].play(t, k.m, k.v, out);
   }
 
   // ハンドクラップ：短いノイズを 3 回重ねて余韻をつける
@@ -767,12 +820,14 @@
     btnStop.disabled = mode === 'edit';
     bpmInput.disabled = mode === 'playing';
     btnOtehon.disabled = mode === 'playing';
+    soundSel.disabled = mode === 'playing';
     btnClear.disabled = mode !== 'edit';
   }
 
   function renderSettings() {
     bpmInput.value = state.bpm;
     bpmVal.textContent = state.bpm;
+    soundSel.value = state.sound;
     btnOtehon.setAttribute('aria-pressed', String(state.otehon));
     btnOtehon.textContent = state.otehon ? '👏 おてほん ON' : '👏 おてほん OFF';
   }
@@ -790,6 +845,16 @@
     bpmVal.textContent = state.bpm;
   });
   bpmInput.addEventListener('change', save);
+  for (const key of SOUND_KEYS) soundSel.add(new Option(VOICES[key].label, key));
+  soundSel.addEventListener('change', async () => {
+    state.sound = soundSel.value;
+    save();
+    // 選んだ音をためしに鳴らす（3 → はい！）
+    await ensureAudio();
+    const t = ctx.currentTime + 0.05;
+    tick(t, 'count', ctx.destination);
+    tick(t + 0.35, 'high', ctx.destination);
+  });
   btnClear.addEventListener('click', () => {
     if (mode !== 'edit' || state.notes.length === 0) return;
     if (!confirm('おいたカードを ぜんぶ けしても いいですか？')) return;

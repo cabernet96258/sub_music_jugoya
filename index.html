@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>十五夜さんのもちつき リズムづくり</title>
+<style>
+  :root {
+    --slot: 60px;
+    --bg: #fffaf0;
+    --panel: #ffffff;
+    --ink: #333333;
+    --muted: #8a7f70;
+    --line: #d9cbb4;
+    --accent: #e8702a;
+    --note-bg: #fff0d9;
+    --note-border: #f0a040;
+    --note-bar: #f5b560;
+    --rest-bg: #e3f0fc;
+    --rest-border: #6aa3d8;
+    --rest-bar: #a8cbee;
+    --ok: #4caf50;
+    --ng: #e53935;
+    --playbar: #e53935;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Hiragino Maru Gothic ProN", "M PLUS Rounded 1c", "Noto Sans JP", "Noto Sans CJK JP", sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 16px;
+    min-height: 100%;
+  }
+  h1 { margin: 0; font-size: 24px; color: var(--accent); letter-spacing: .05em; }
+  h1 small { font-size: 16px; color: var(--muted); margin-left: .5em; }
+
+  /* ---------- コントロール ---------- */
+  #controls {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--panel); border-radius: 14px; padding: 8px 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  }
+  button {
+    font: inherit; font-size: 18px; font-weight: bold;
+    border: 3px solid transparent; border-radius: 12px;
+    padding: 8px 16px; cursor: pointer; background: #eee; color: var(--ink);
+    min-height: 48px;
+  }
+  button:disabled { opacity: .35; cursor: not-allowed; }
+  #btnPlay { background: #ffe0cc; border-color: var(--accent); }
+  #btnPause { background: #fff4c2; border-color: #d8b400; }
+  #btnStop { background: #e6e6e6; border-color: #999; }
+  #btnOtehon { background: #f3f3f3; border-color: #bbb; }
+  #btnOtehon[aria-pressed="true"] { background: #ffd6e5; border-color: #e0557f; color: #b0003a; }
+  #btnClear { background: #fff; border-color: #ccc; font-size: 15px; margin-left: auto; }
+  .sep { width: 2px; height: 36px; background: var(--line); }
+  .tempo { display: flex; align-items: center; gap: 8px; font-weight: bold; }
+  .tempo input { width: 200px; accent-color: var(--accent); }
+  .tempo output { display: inline-block; min-width: 3ch; font-size: 26px; color: var(--accent); text-align: right; }
+
+  /* ---------- ミニマップ ---------- */
+  #minimap {
+    position: relative; height: 34px; background: var(--panel);
+    border: 2px solid var(--line); border-radius: 8px; overflow: hidden; cursor: pointer;
+    touch-action: none;
+  }
+  #minimap .mm-measure { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); }
+  #minimap .mm-measure span { position: absolute; top: 1px; left: 3px; font-size: 10px; color: var(--muted); }
+  #minimap .mm-note { position: absolute; top: 13px; height: 15px; border-radius: 3px; background: var(--note-border); }
+  #minimap .mm-note.rest { background: var(--rest-border); }
+  #minimap #mmWindow {
+    position: absolute; top: 0; bottom: 0; border: 3px solid var(--accent);
+    border-radius: 6px; background: rgba(232,112,42,.08); pointer-events: none;
+  }
+  #minimap #mmHead { position: absolute; top: 0; bottom: 0; width: 3px; background: var(--playbar); display: none; pointer-events: none; }
+  body.playmode #minimap #mmWindow { display: none; }
+  body.playmode #minimap #mmHead { display: block; }
+
+  /* ---------- 帯（楽譜） ---------- */
+  #stage { position: relative; }
+  #viewport {
+    position: relative; overflow-x: auto; overflow-y: hidden;
+    background: var(--panel); border-radius: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    scrollbar-width: auto; scrollbar-color: #d8b58c #f4ead9;
+  }
+  #viewport::-webkit-scrollbar { height: 16px; }
+  #viewport::-webkit-scrollbar-track { background: #f4ead9; border-radius: 8px; }
+  #viewport::-webkit-scrollbar-thumb { background: #d8b58c; border-radius: 8px; }
+  body.playmode #viewport { overflow: hidden; }
+  #band { position: relative; height: 184px; will-change: transform; }
+  .measure { position: absolute; top: 0; width: calc(var(--slot) * 4); height: 100%; }
+  .lyric {
+    position: absolute; top: 6px; left: 4px; right: 4px; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: bold; border-radius: 10px; white-space: nowrap;
+    transition: background .15s;
+  }
+  .lyric .no { position: absolute; left: 4px; top: 1px; font-size: 11px; color: var(--muted); font-weight: normal; }
+  .measure.now .lyric { background: #fff176; }
+  .row {
+    position: absolute; top: 50px; left: 0; width: 100%; height: 124px;
+    border-left: 3px solid #555; background: #fcfaf6;
+  }
+  .measure.last .row { border-right: 7px double #555; }
+  .row .g { position: absolute; top: 8px; bottom: 8px; border-left: 2px dotted #e2d6c2; }
+  .row .g.beat { border-left: 2px dashed #c9b594; }
+
+  /* ---------- 音符カード ---------- */
+  .card {
+    position: absolute; height: 112px;
+    background: var(--note-bg); border: 3px solid var(--note-border); border-radius: 10px;
+    color: #222; touch-action: none; cursor: grab;
+    transform-origin: 30px 60%;
+  }
+  .card.rest { background: var(--rest-bg); border-color: var(--rest-border); }
+  .card svg.sym { position: absolute; left: 4px; top: 2px; width: 40px; height: 70px; overflow: visible; }
+  .card.w2 svg.sym { width: 100px; }
+  .card .len { position: absolute; left: 46px; right: 8px; top: 50px; height: 10px; border-radius: 5px; background: var(--note-bar); }
+  .card.rest .len { background: var(--rest-bar); }
+  .card .lbl { position: absolute; left: 0; right: 0; bottom: 6px; padding-left: 6px; font-size: 20px; font-weight: bold; }
+  .card .nm { position: absolute; left: 0; right: 0; top: -24px; text-align: center; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .card.placed { top: 56px; }
+  .card.dragging-src { opacity: .25; }
+  .card.ghost {
+    position: fixed; z-index: 1000; pointer-events: none; opacity: .92;
+    box-shadow: 0 8px 18px rgba(0,0,0,.25); transform: scale(1.04);
+  }
+  .beam { position: absolute; height: 6px; background: #222; top: 70px; pointer-events: none; z-index: 2; }
+  .card.pop { animation: pop .25s ease-out; z-index: 5; }
+  @keyframes pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.4); }
+    75% { transform: scale(.95); }
+    100% { transform: scale(1); }
+  }
+  .card.sounding { background: #ffd54f; border-color: #ff8f00; box-shadow: 0 0 14px rgba(255,160,0,.8); }
+  .card.rest.sounding { background: #d0d7de; border-color: #8a96a3; box-shadow: 0 0 10px rgba(120,130,140,.5); }
+
+  #hint { position: absolute; top: 50px; height: 124px; border-radius: 10px; pointer-events: none; display: none; z-index: 3; }
+  #hint.ok { display: block; background: rgba(76,175,80,.18); border: 3px dashed var(--ok); }
+  #hint.ng { display: block; background: rgba(229,57,53,.22); border: 3px solid var(--ng); }
+
+  /* ---------- 再生バー・カウント ---------- */
+  #playbar {
+    position: absolute; top: 44px; bottom: 0; left: 50%; width: 6px; margin-left: -3px;
+    background: var(--playbar); border-radius: 3px; display: none; z-index: 10; pointer-events: none;
+    box-shadow: 0 0 8px rgba(229,57,53,.6);
+  }
+  #playbar::before {
+    content: ""; position: absolute; top: -14px; left: -9px;
+    border: 12px solid transparent; border-top: 14px solid var(--playbar); border-bottom: 0;
+  }
+  body.playmode #playbar { display: block; }
+  #count {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    font-size: 150px; font-weight: 900; color: var(--accent); z-index: 20; pointer-events: none;
+    -webkit-text-stroke: 6px #fff; paint-order: stroke fill;
+    text-shadow: 0 4px 12px rgba(0,0,0,.25);
+  }
+  #count.show { display: flex; }
+  #count span { display: inline-block; }
+  #count span.go { animation: countIn .45s ease-out; }
+  @keyframes countIn { 0% { transform: scale(.4); opacity: 0; } 50% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
+
+  /* ---------- パレット ---------- */
+  #palette {
+    background: var(--panel); border-radius: 14px; padding: 10px 14px 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  }
+  #palette h2 { margin: 0 0 30px; font-size: 16px; color: var(--muted); }
+  #cards { display: flex; align-items: flex-end; gap: 40px; flex-wrap: wrap; row-gap: 38px; }
+  #cards .card { position: relative; }
+  #trash {
+    margin-left: auto; width: 110px; height: 112px; border: 3px dashed #bbb; border-radius: 12px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #999; font-size: 14px; font-weight: bold; gap: 4px;
+  }
+  #trash svg { width: 44px; height: 44px; }
+  #trash.active { border-color: var(--ng); color: var(--ng); background: #ffebee; }
+  body.playmode #palette, body.pausemode #palette { opacity: .4; pointer-events: none; }
+  body.playmode #band, body.pausemode #band { pointer-events: none; }
+
+  @media (max-width: 900px) {
+    h1 { font-size: 20px; }
+    .tempo input { width: 140px; }
+  }
+</style>
+</head>
+<body>
+  <h1>じゅうごやさんの もちつき <small>リズムをつくろう</small></h1>
+
+  <div id="controls">
+    <button id="btnPlay" type="button">▶ さいせい</button>
+    <button id="btnPause" type="button" disabled>❚❚ いちじていし</button>
+    <button id="btnStop" type="button" disabled>■ ていし</button>
+    <div class="sep"></div>
+    <button id="btnOtehon" type="button" aria-pressed="false">👏 おてほん OFF</button>
+    <div class="sep"></div>
+    <label class="tempo">テンポ
+      <input id="bpm" type="range" min="60" max="120" step="1" value="80">
+      <output id="bpmVal">80</output>
+    </label>
+    <button id="btnClear" type="button">ぜんぶけす</button>
+  </div>
+
+  <div id="minimap" aria-label="ぜんたいの地図"><div id="mmNotes"></div><div id="mmWindow"></div><div id="mmHead"></div></div>
+
+  <div id="stage">
+    <div id="viewport"><div id="band"><div id="measures"></div><div id="notes"></div><div id="hint"></div></div></div>
+    <div id="playbar"></div>
+    <div id="count"><span></span></div>
+  </div>
+
+  <div id="palette">
+    <h2>おんぷカード（下の帯へドラッグしておこう）</h2>
+    <div id="cards">
+      <div id="trash">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v7M14 10v7"/></svg>
+        ここにすてる
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ===== 定数 =====
+  const SLOT = 60;              // 八分音符 1 マスの幅(px)
+  const MEASURE = SLOT * 4;     // 2/4 拍子 1 小節 = 八分音符 4 つ
+  const NM = 8;                 // 小節数
+  const TOTAL = NM * 4;         // 全体の八分音符マス数
+  const PAD = 24;               // 帯の左右の余白
+  const CARD_INSET = 3;         // マスとカードのすき間
+  const STEM_X = CARD_INSET + 4 + 22.8; // マス左端から符幹までの距離
+  const STORE_KEY = 'jugoya-rhythm-v1';
+
+  const LYRICS = ['じゅうごやさんの', 'もちつきは', 'トーントーン', 'トッテッタ',
+                  'トーントーン', 'トッテッタ', 'トッテトッテ', 'トッテッタ'];
+
+  // dur は八分音符いくつ分か
+  const TYPES = {
+    q:  { dur: 2, label: 'タン', name: 'しぶおんぷ',        rest: false },
+    e:  { dur: 1, label: 'タ',   name: 'はちぶおんぷ',      rest: false },
+    ee: { dur: 2, label: 'タタ', name: 'にれんはちぶおんぷ', rest: false },
+    h:  { dur: 4, label: 'ター', name: 'にぶおんぷ',        rest: false },
+    qr: { dur: 2, label: 'ウン', name: 'しぶきゅうふ',      rest: true },
+    er: { dur: 1, label: 'ウ',   name: 'はちぶきゅうふ',    rest: true },
+  };
+  const PALETTE = ['q', 'e', 'ee', 'h', 'qr', 'er'];
+
+  // ===== 状態 =====
+  const state = { notes: [], bpm: 80, otehon: false };
+  let nextId = 1;
+  let mode = 'edit';            // 'edit' | 'playing' | 'paused'
+  let pausedE = 0;
+  let session = null;
+  let drag = null;
+  const noteEls = new Map();
+
+  // ===== 要素 =====
+  const $ = (id) => document.getElementById(id);
+  const viewport = $('viewport'), band = $('band'), measuresEl = $('measures'), notesEl = $('notes'),
+        hint = $('hint'), countEl = $('count'), countSpan = countEl.querySelector('span'),
+        mmNotes = $('mmNotes'), mmWindow = $('mmWindow'), mmHead = $('mmHead'), minimap = $('minimap'),
+        cardsEl = $('cards'), trash = $('trash'),
+        btnPlay = $('btnPlay'), btnPause = $('btnPause'), btnStop = $('btnStop'),
+        btnOtehon = $('btnOtehon'), btnClear = $('btnClear'), bpmInput = $('bpm'), bpmVal = $('bpmVal');
+
+  // ===== 保存 =====
+  function load() {
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (_) { saved = null; }
+    if (!saved || typeof saved !== 'object') return;
+    if (Number.isFinite(saved.bpm)) state.bpm = Math.min(120, Math.max(60, Math.round(saved.bpm)));
+    state.otehon = !!saved.otehon;
+    if (Array.isArray(saved.notes)) {
+      for (const n of saved.notes) {
+        if (!n || !TYPES[n.t] || n.t === 'ee') continue;
+        const m = n.m | 0, p = n.p | 0, dur = TYPES[n.t].dur;
+        if (m < 0 || m >= NM || p < 0 || p + dur > 4) continue;
+        if (state.notes.some((o) => o.m === m && overlaps(o, p, dur))) continue;
+        state.notes.push({ id: nextId++, m, p, t: n.t });
+      }
+    }
+  }
+  function save() {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({
+        notes: state.notes.map((n) => ({ m: n.m, p: n.p, t: n.t })),
+        bpm: state.bpm, otehon: state.otehon,
+      }));
+    } catch (_) { /* 保存できない環境でも動作は続ける */ }
+  }
+
+  // ===== 音符データ操作 =====
+  function overlaps(n, p, dur) {
+    const d = TYPES[n.t].dur;
+    return n.p < p + dur && p < n.p + d;
+  }
+  function startOf(n) { return n.m * 4 + n.p; }
+
+  // 小節 m の位置 p に type を置く（重なるカードは上書き）
+  function place(type, m, p) {
+    const dur = TYPES[type].dur;
+    state.notes = state.notes.filter((n) => !(n.m === m && overlaps(n, p, dur)));
+    if (type === 'ee') {
+      state.notes.push({ id: nextId++, m, p, t: 'e' }, { id: nextId++, m, p: p + 1, t: 'e' });
+    } else {
+      state.notes.push({ id: nextId++, m, p, t: type });
+    }
+  }
+
+  // 同じ小節で隣り合う八分音符を、左から順に 2 つずつ連桁にする
+  function computeBeams() {
+    const roles = new Map(), pairs = [];
+    for (let m = 0; m < NM; m++) {
+      const es = state.notes.filter((n) => n.m === m && n.t === 'e').sort((a, b) => a.p - b.p);
+      for (let i = 0; i < es.length;) {
+        if (i + 1 < es.length && es[i + 1].p === es[i].p + 1) {
+          roles.set(es[i].id, 'L'); roles.set(es[i + 1].id, 'R');
+          pairs.push([es[i], es[i + 1]]);
+          i += 2;
+        } else {
+          i += 1;
+        }
+      }
+    }
+    return { roles, pairs };
+  }
+
+  // ===== 音符の SVG =====
+  const HEAD = (cx, filled) => filled
+    ? `<ellipse cx="${cx}" cy="56" rx="8.5" ry="6" transform="rotate(-20 ${cx} 56)" fill="currentColor"/>`
+    : `<ellipse cx="${cx}" cy="56" rx="7.6" ry="5.2" transform="rotate(-20 ${cx} 56)" fill="none" stroke="currentColor" stroke-width="2.8"/>`;
+  const STEM = (x) => `<rect x="${x}" y="12" width="2.4" height="44" fill="currentColor"/>`;
+  const FLAG = '<path d="M25.2 12 C25.5 22 36.5 25 34.5 39 C34 42 33 45 31.5 47 C33.5 37 30 30 25.2 28 Z" fill="currentColor"/>';
+
+  function symbolSVG(type, beamed) {
+    switch (type) {
+      case 'q':  return `<svg class="sym" viewBox="0 0 40 70">${HEAD(16, true)}${STEM(22.8)}</svg>`;
+      case 'h':  return `<svg class="sym" viewBox="0 0 40 70">${HEAD(16, false)}${STEM(22.8)}</svg>`;
+      case 'e':  return `<svg class="sym" viewBox="0 0 40 70">${HEAD(16, true)}${STEM(22.8)}${beamed ? '' : FLAG}</svg>`;
+      case 'ee': return `<svg class="sym" viewBox="0 0 100 70">${HEAD(16, true)}${STEM(22.8)}${HEAD(76, true)}${STEM(82.8)}<rect x="22.8" y="12" width="62.4" height="6" fill="currentColor"/></svg>`;
+      case 'qr': return '<svg class="sym" viewBox="0 0 40 70"><path d="M14 10 L25 24 L17 35 L27 48 C19 44 14 50 21 60" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+      case 'er': return '<svg class="sym" viewBox="0 0 40 70"><circle cx="14" cy="28" r="4.8" fill="currentColor"/><path d="M14 31 C19 35 25 32 29 25 L20 58" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    }
+    return '';
+  }
+
+  function makeCard(type, opts = {}) {
+    const def = TYPES[type];
+    const el = document.createElement('div');
+    el.className = 'card' + (def.rest ? ' rest' : '') + (type === 'ee' ? ' w2' : '');
+    el.style.width = (def.dur * SLOT - CARD_INSET * 2) + 'px';
+    const showLen = def.dur >= 2 && type !== 'ee';
+    const lbl = type === 'ee' ? 'タ<span style="display:inline-block;width:41px"></span>タ' : def.label;
+    el.innerHTML = symbolSVG(type, opts.beamed) + (showLen ? '<div class="len"></div>' : '') +
+      `<div class="lbl">${lbl}</div>` + (opts.name ? `<div class="nm">${def.name}</div>` : '');
+    return el;
+  }
+
+  // ===== 描画 =====
+  function buildMeasures() {
+    band.style.width = (PAD * 2 + NM * MEASURE) + 'px';
+    for (let m = 0; m < NM; m++) {
+      const el = document.createElement('div');
+      el.className = 'measure' + (m === NM - 1 ? ' last' : '');
+      el.style.left = (PAD + m * MEASURE) + 'px';
+      el.innerHTML = `<div class="lyric"><span class="no">${m + 1}</span>${LYRICS[m]}</div>` +
+        `<div class="row"><div class="g" style="left:${SLOT}px"></div><div class="g beat" style="left:${SLOT * 2}px"></div><div class="g" style="left:${SLOT * 3}px"></div></div>`;
+      measuresEl.appendChild(el);
+    }
+  }
+
+  function renderNotes() {
+    notesEl.innerHTML = '';
+    noteEls.clear();
+    const { roles, pairs } = computeBeams();
+    for (const n of state.notes) {
+      const el = makeCard(n.t, { beamed: roles.has(n.id) });
+      el.classList.add('placed');
+      el.style.left = (PAD + startOf(n) * SLOT + CARD_INSET) + 'px';
+      el.addEventListener('pointerdown', (ev) => startDrag(ev, { from: 'band', id: n.id, type: n.t }));
+      notesEl.appendChild(el);
+      noteEls.set(n.id, el);
+    }
+    for (const [a] of pairs) {
+      const b = document.createElement('div');
+      b.className = 'beam';
+      b.style.left = (PAD + startOf(a) * SLOT + STEM_X) + 'px';
+      b.style.width = (SLOT + 2.4) + 'px';
+      notesEl.appendChild(b);
+    }
+    renderMinimap();
+  }
+
+  function buildPalette() {
+    for (const type of PALETTE) {
+      const el = makeCard(type, { name: true, beamed: false });
+      el.addEventListener('pointerdown', (ev) => startDrag(ev, { from: 'palette', type }));
+      cardsEl.insertBefore(el, trash);
+    }
+  }
+
+  // ===== ミニマップ =====
+  function buildMinimap() {
+    for (let m = 0; m < NM; m++) {
+      const d = document.createElement('div');
+      d.className = 'mm-measure';
+      d.style.left = (m / NM * 100) + '%';
+      d.style.width = (100 / NM) + '%';
+      d.innerHTML = `<span>${m + 1}</span>`;
+      minimap.insertBefore(d, mmNotes);
+    }
+  }
+  function renderMinimap() {
+    mmNotes.innerHTML = '';
+    for (const n of state.notes) {
+      const d = document.createElement('div');
+      d.className = 'mm-note' + (TYPES[n.t].rest ? ' rest' : '');
+      d.style.left = `calc(${startOf(n) / TOTAL * 100}% + 1px)`;
+      d.style.width = `calc(${TYPES[n.t].dur / TOTAL * 100}% - 2px)`;
+      mmNotes.appendChild(d);
+    }
+    updateMinimapWindow();
+  }
+  function updateMinimapWindow() {
+    const w = NM * MEASURE;
+    const from = Math.max(0, (viewport.scrollLeft - PAD) / w);
+    const to = Math.min(1, (viewport.scrollLeft + viewport.clientWidth - PAD) / w);
+    mmWindow.style.left = (from * 100) + '%';
+    mmWindow.style.width = (Math.max(0, to - from) * 100) + '%';
+  }
+  function minimapJump(ev) {
+    if (mode !== 'edit') return;
+    const r = minimap.getBoundingClientRect();
+    const frac = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+    viewport.scrollLeft = PAD + frac * NM * MEASURE - viewport.clientWidth / 2;
+  }
+  minimap.addEventListener('pointerdown', (ev) => {
+    minimapJump(ev);
+    minimap.setPointerCapture(ev.pointerId);
+  });
+  minimap.addEventListener('pointermove', (ev) => { if (ev.buttons) minimapJump(ev); });
+  viewport.addEventListener('scroll', updateMinimapWindow);
+  window.addEventListener('resize', updateMinimapWindow);
+
+  // ===== ドラッグ＆ドロップ（Pointer Events：マウスとタッチの両方に対応） =====
+  function startDrag(ev, src) {
+    if (mode !== 'edit' || drag) return;
+    if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+    ev.preventDefault();
+    const srcEl = ev.currentTarget;
+    const r = srcEl.getBoundingClientRect();
+    const ghost = makeCard(src.type, { beamed: false });
+    ghost.classList.add('ghost');
+    document.body.appendChild(ghost);
+    drag = {
+      src, srcEl, ghost, type: src.type, dur: TYPES[src.type].dur,
+      offX: ev.clientX - r.left, offY: ev.clientY - r.top,
+      x: ev.clientX, y: ev.clientY, target: undefined, pointerId: ev.pointerId, raf: 0,
+    };
+    if (src.from === 'band') srcEl.classList.add('dragging-src');
+    window.addEventListener('pointermove', onDragMove);
+    window.addEventListener('pointerup', onDragEnd);
+    window.addEventListener('pointercancel', onDragCancel);
+    updateDrag();
+    drag.raf = requestAnimationFrame(autoScroll);
+  }
+
+  function onDragMove(ev) {
+    if (!drag || ev.pointerId !== drag.pointerId) return;
+    drag.x = ev.clientX; drag.y = ev.clientY;
+    updateDrag();
+  }
+
+  // 帯の上なら {m, p, valid}、帯の外なら null
+  function computeTarget() {
+    const vr = viewport.getBoundingClientRect();
+    if (drag.x < vr.left || drag.x > vr.right || drag.y < vr.top - 20 || drag.y > vr.bottom + 20) return null;
+    const cardLeft = drag.x - drag.offX - vr.left + viewport.scrollLeft - PAD - CARD_INSET;
+    const slot = Math.min(TOTAL - 1, Math.max(0, Math.round(cardLeft / SLOT)));
+    const m = Math.floor(slot / 4), p = slot % 4;
+    return { m, p, valid: p + drag.dur <= 4 };
+  }
+
+  function updateDrag() {
+    const g = drag.ghost;
+    g.style.left = (drag.x - drag.offX) + 'px';
+    g.style.top = (drag.y - drag.offY) + 'px';
+    const t = computeTarget();
+    drag.target = t;
+    if (t) {
+      hint.className = t.valid ? 'ok' : 'ng';
+      hint.style.left = (PAD + (t.m * 4 + t.p) * SLOT) + 'px';
+      hint.style.width = (drag.dur * SLOT) + 'px';
+    } else {
+      hint.className = '';
+    }
+    trash.classList.toggle('active', !t && drag.src.from === 'band');
+  }
+
+  // ドラッグ中に帯の左右の端へ近づくと自動スクロール
+  function autoScroll() {
+    if (!drag) return;
+    const vr = viewport.getBoundingClientRect();
+    const EDGE = 70;
+    if (drag.y > vr.top - 40 && drag.y < vr.bottom + 40) {
+      let dx = 0;
+      if (drag.x < vr.left + EDGE) dx = -Math.ceil((vr.left + EDGE - drag.x) / 6);
+      else if (drag.x > vr.right - EDGE) dx = Math.ceil((drag.x - (vr.right - EDGE)) / 6);
+      dx = Math.max(-14, Math.min(14, dx));
+      if (dx) {
+        viewport.scrollLeft += dx;
+        updateDrag();
+      }
+    }
+    drag.raf = requestAnimationFrame(autoScroll);
+  }
+
+  function onDragEnd(ev) {
+    if (!drag || ev.pointerId !== drag.pointerId) return;
+    drag.x = ev.clientX; drag.y = ev.clientY;
+    const t = computeTarget();
+    const { src } = drag;
+    let changed = false;
+    if (t && t.valid) {
+      if (src.from === 'band') state.notes = state.notes.filter((n) => n.id !== src.id);
+      place(drag.type, t.m, t.p);
+      changed = true;
+    } else if (!t && src.from === 'band') {
+      state.notes = state.notes.filter((n) => n.id !== src.id);  // 帯の外へ出したら削除
+      changed = true;
+    }
+    // 小節線をまたぐ（赤）ときは何もしない＝元に戻る
+    finishDrag();
+    if (changed) { save(); renderNotes(); }
+  }
+  function onDragCancel(ev) {
+    if (!drag || ev.pointerId !== drag.pointerId) return;
+    finishDrag();
+  }
+  function finishDrag() {
+    cancelAnimationFrame(drag.raf);
+    drag.ghost.remove();
+    drag.srcEl.classList.remove('dragging-src');
+    hint.className = '';
+    trash.classList.remove('active');
+    window.removeEventListener('pointermove', onDragMove);
+    window.removeEventListener('pointerup', onDragEnd);
+    window.removeEventListener('pointercancel', onDragCancel);
+    drag = null;
+  }
+
+  // ===== 音（Web Audio API で合成） =====
+  let ctx = null, noiseBuf = null;
+  function ensureAudio() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      ctx = new AC();
+      noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+  }
+
+  // ウッドブロック風の「コッ」
+  const TICK = {
+    count:  { f: 1000, v: 0.7 },
+    high:   { f: 1600, v: 0.8 },
+    accent: { f: 1250, v: 0.32 },
+    beat:   { f: 1000, v: 0.2 },
+  };
+  function tick(t, kind, out) {
+    const k = TICK[kind];
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(k.f * 1.15, t);
+    o.frequency.exponentialRampToValueAtTime(k.f, t + 0.03);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(k.v, t + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+    o.connect(g).connect(out);
+    o.start(t); o.stop(t + 0.09);
+  }
+
+  // ハンドクラップ：短いノイズを 3 回重ねて余韻をつける
+  function clap(t, out) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 1150; bp.Q.value = 0.9;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    for (const d of [0, 0.011, 0.022]) {
+      g.gain.setValueAtTime(1.0, t + d);
+      g.gain.exponentialRampToValueAtTime(0.08, t + d + 0.009);
+    }
+    g.gain.setValueAtTime(0.9, t + 0.033);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    src.connect(bp).connect(g).connect(out);
+    src.start(t, Math.random() * 0.5);
+    src.stop(t + 0.22);
+  }
+
+  // ===== 再生 =====
+  function play() {
+    if (mode === 'playing') return;
+    if (drag) finishDrag();
+    ensureAudio();
+    const resume = mode === 'paused';
+    const R = resume ? Math.max(0, Math.floor(pausedE / 2) * 2) : 0;   // 拍の頭から再開
+    const labels = resume ? ['1', 'はい！'] : ['3', '2', '1', 'はい！'];
+    const startE = R - labels.length * 2;
+    const es = 30 / state.bpm;           // 八分音符 1 つの秒数
+    const t0 = ctx.currentTime + 0.12;
+    const out = ctx.createGain();
+    out.connect(ctx.destination);
+    const time = (e) => t0 + (e - startE) * es;
+
+    const popped = new Set();
+    for (const n of state.notes) if (startOf(n) < R) popped.add(n.id);
+    session = { t0, startE, R, es, out, labels, time, popped, lastLabel: -1, curE: startE, raf: 0 };
+
+    labels.forEach((_, k) => tick(time(startE + k * 2), k === labels.length - 1 ? 'high' : 'count', out));
+    for (let e = R; e < TOTAL; e += 2) tick(time(e), e % 4 === 0 ? 'accent' : 'beat', out);
+    if (state.otehon) {
+      for (const n of state.notes) {
+        if (!TYPES[n.t].rest && startOf(n) >= R) clap(time(startOf(n)), out);
+      }
+    }
+
+    mode = 'playing';
+    viewport.scrollLeft = 0;
+    document.body.classList.add('playmode');
+    document.body.classList.remove('pausemode');
+    updateButtons();
+    session.raf = requestAnimationFrame(frame);
+  }
+
+  function frame() {
+    if (mode !== 'playing' || !session) return;
+    const s = session;
+    const e = Math.max(s.startE, s.startE + (ctx.currentTime - s.t0) / s.es);
+    s.curE = e;
+    renderPlayhead(e);
+
+    // カウントダウン
+    if (e < s.R + 1) {
+      const k = Math.floor((e - s.startE) / 2);
+      if (k >= 0 && k < s.labels.length && k !== s.lastLabel) {
+        s.lastLabel = k;
+        showCount(s.labels[k]);
+      }
+    } else if (countEl.classList.contains('show')) {
+      hideCount();
+    }
+
+    // 音符のポコッと光る表示
+    for (const n of state.notes) {
+      const el = noteEls.get(n.id);
+      if (!el) continue;
+      const st = startOf(n), en = st + TYPES[n.t].dur;
+      if (!s.popped.has(n.id) && e >= st) {
+        s.popped.add(n.id);
+        el.classList.remove('pop');
+        void el.offsetWidth;
+        el.classList.add('pop');
+      }
+      el.classList.toggle('sounding', e >= st && e < en);
+    }
+
+    if (ctx.currentTime >= s.time(TOTAL) + 1) { stop(); return; }
+    s.raf = requestAnimationFrame(frame);
+  }
+
+  function renderPlayhead(e) {
+    const center = viewport.clientWidth / 2;
+    band.style.transform = `translateX(${center - (PAD + e * SLOT)}px)`;
+    const cur = e >= 0 && e < TOTAL ? Math.floor(e / 4) : -1;
+    measuresEl.querySelectorAll('.measure').forEach((el, i) => el.classList.toggle('now', i === cur));
+    mmHead.style.left = (Math.min(1, Math.max(0, e / TOTAL)) * 100) + '%';
+  }
+
+  function showCount(text) {
+    countEl.classList.add('show');
+    countSpan.textContent = text;
+    countSpan.classList.remove('go');
+    void countSpan.offsetWidth;
+    countSpan.classList.add('go');
+  }
+  function hideCount() {
+    countEl.classList.remove('show');
+    countSpan.textContent = '';
+  }
+
+  function endSession() {
+    if (!session) return;
+    cancelAnimationFrame(session.raf);
+    try { session.out.disconnect(); } catch (_) { /* 既に切断済み */ }
+    session = null;
+    hideCount();
+  }
+
+  function pause() {
+    if (mode !== 'playing') return;
+    pausedE = Math.min(TOTAL, Math.max(session.R, session.curE));
+    endSession();
+    mode = 'paused';
+    document.body.classList.add('pausemode');
+    for (const el of noteEls.values()) el.classList.remove('pop');
+    updateButtons();
+  }
+
+  function stop() {
+    endSession();
+    mode = 'edit';
+    pausedE = 0;
+    document.body.classList.remove('playmode', 'pausemode');
+    band.style.transform = '';
+    measuresEl.querySelectorAll('.measure').forEach((el) => el.classList.remove('now'));
+    for (const el of noteEls.values()) el.classList.remove('pop', 'sounding');
+    viewport.scrollLeft = 0;
+    updateMinimapWindow();
+    updateButtons();
+  }
+
+  function updateButtons() {
+    btnPlay.disabled = mode === 'playing';
+    btnPlay.textContent = mode === 'paused' ? '▶ つづきから' : '▶ さいせい';
+    btnPause.disabled = mode !== 'playing';
+    btnStop.disabled = mode === 'edit';
+    bpmInput.disabled = mode === 'playing';
+    btnOtehon.disabled = mode === 'playing';
+    btnClear.disabled = mode !== 'edit';
+  }
+
+  function renderSettings() {
+    bpmInput.value = state.bpm;
+    bpmVal.textContent = state.bpm;
+    btnOtehon.setAttribute('aria-pressed', String(state.otehon));
+    btnOtehon.textContent = state.otehon ? '👏 おてほん ON' : '👏 おてほん OFF';
+  }
+
+  // ===== イベント =====
+  btnPlay.addEventListener('click', play);
+  btnPause.addEventListener('click', pause);
+  btnStop.addEventListener('click', stop);
+  btnOtehon.addEventListener('click', () => {
+    state.otehon = !state.otehon;
+    renderSettings(); save();
+  });
+  bpmInput.addEventListener('input', () => {
+    state.bpm = Number(bpmInput.value);
+    bpmVal.textContent = state.bpm;
+  });
+  bpmInput.addEventListener('change', save);
+  btnClear.addEventListener('click', () => {
+    if (mode !== 'edit' || state.notes.length === 0) return;
+    if (!confirm('おいたカードを ぜんぶ けしても いいですか？')) return;
+    state.notes = [];
+    save(); renderNotes();
+  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+
+  // ===== 初期化 =====
+  load();
+  buildMeasures();
+  buildMinimap();
+  buildPalette();
+  renderSettings();
+  renderNotes();
+  updateButtons();
+})();
+</script>
+</body>
+</html>

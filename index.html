@@ -938,6 +938,7 @@
   const MISS = GRADES.length - 1;
   const STRAY = { mk: '✓', wd: 'たたきすぎ', color: '#78909c' };
   const STRAY_PENALTY = 20;     // 休符や何もないところでたたいたときの減点
+  const MIN_NOTES = 8;          // 採点するのに必要な音符（休符以外）の数
 
   let game = { score: 0, max: 0, lit: 0, judged: new Set(), scoring: true };
 
@@ -976,7 +977,7 @@
 
   // 点数と星を更新。新しく光った星はキランと光らせて音も鳴らす
   function updateScore() {
-    if (!game.scoring) { pointsEl.textContent = 'おてほん'; return; }
+    if (!game.scoring) { pointsEl.textContent = state.otehon ? 'おてほん' : 'さいてん なし'; return; }
     if (game.max === 0) { pointsEl.textContent = '-- てん'; return; }
     const pct = percent(), lit = starCount(pct);
     pointsEl.textContent = pct + ' てん';
@@ -1207,7 +1208,12 @@
     const time = (e) => t0 + (e - startE) * es;
     // 聞こえる音は出力の遅れぶん後ろにずれるので、表示と判定もそれに合わせる
     const lat = Math.min(0.1, Math.max(0, ctx.outputLatency || ctx.baseLatency || 0));
-    if (!resume) resetGame(!state.otehon);
+    if (!resume) {
+      // 音符が少なすぎると簡単に満点が取れてしまうので、8 こ未満は採点しない（練習として再生）
+      const hits = state.notes.filter((n) => !TYPES[n.t].rest).length;
+      if (!state.otehon && hits < MIN_NOTES) toast(`🎵 おんぷが ${MIN_NOTES}こ いじょう ないと さいてん しないよ（いまは ${hits}こ）`);
+      resetGame(!state.otehon && hits >= MIN_NOTES);
+    }
 
     const popped = new Set();
     for (const n of state.notes) if (startOf(n) < R) popped.add(n.id);

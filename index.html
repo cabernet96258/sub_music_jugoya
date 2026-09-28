@@ -273,7 +273,15 @@
     background: var(--panel); border-radius: 14px; padding: 10px 14px 14px;
     box-shadow: 0 1px 4px rgba(0,0,0,.08);
   }
-  #palette h2 { margin: 0 0 30px; font-size: 16px; color: var(--muted); }
+  #palette .phead { display: flex; align-items: center; gap: 12px; margin: 0 0 22px; }
+  #palette h2 { margin: 0; font-size: 16px; color: var(--muted); }
+  #btnShot { margin-left: auto; min-height: 40px; padding: 4px 16px; font-size: 16px; background: #e3f2fd; border-color: #64b5f6; color: #1565c0; }
+  #toast {
+    position: fixed; left: 50%; bottom: 28px; z-index: 3000; transform: translateX(-50%) translateY(20px);
+    background: #333; color: #fff; font-size: 18px; font-weight: bold; padding: 12px 22px; border-radius: 14px;
+    opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; white-space: nowrap;
+  }
+  #toast.show { opacity: .95; transform: translateX(-50%) translateY(0); }
   #cards { display: flex; align-items: flex-end; gap: 40px; flex-wrap: wrap; row-gap: 38px; }
   #cards .card { position: relative; }
   #trash {
@@ -371,7 +379,10 @@
   </div>
 
   <div id="palette">
-    <h2>おんぷカード（下の帯へドラッグしておこう）</h2>
+    <div class="phead">
+      <h2>おんぷカード（ドラッグしておんぷをおいてみよう）</h2>
+      <button id="btnShot" type="button" title="つくったリズムを がぞうにして コピーします">📷 リズムを コピー</button>
+    </div>
     <div id="cards">
       <div id="trash">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v7M14 10v7"/></svg>
@@ -388,6 +399,8 @@
     </div>
     <ol id="rankList"></ol>
   </section>
+
+  <div id="toast"></div>
 
   <div id="result" role="dialog" aria-label="けっか はっぴょう">
     <div class="box">
@@ -444,7 +457,7 @@
         mmNotes = $('mmNotes'), mmWindow = $('mmWindow'), mmHead = $('mmHead'), minimap = $('minimap'),
         cardsEl = $('cards'), trash = $('trash'), stage = $('stage'), starsEl = $('stars'), pointsEl = $('points'),
         resultEl = $('result'), resStars = $('resStars'), resText = $('resText'), resClose = $('resClose'),
-        rankList = $('rankList'), rankClear = $('rankClear'),
+        rankList = $('rankList'), rankClear = $('rankClear'), btnShot = $('btnShot'), toastEl = $('toast'),
         btnPlay = $('btnPlay'), btnPause = $('btnPause'), btnStop = $('btnStop'),
         btnOtehon = $('btnOtehon'), soundSel = $('sound'), btnClear = $('btnClear'), bpmInput = $('bpm'), bpmVal = $('bpmVal');
 
@@ -1308,6 +1321,94 @@
     btnOtehon.setAttribute('aria-pressed', String(state.otehon));
     btnOtehon.textContent = state.otehon ? '👏 おてほん ON' : '👏 おてほん OFF';
   }
+
+  // ===== リズムを画像にしてコピー（ロイロノートなどに貼り付け用） =====
+  const SHOT_COLS = 4;                       // 1 段に 4 小節 × 2 段
+  const SHOT_M = 28, SHOT_TOP = 64, SHOT_ROW = 196;
+  const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+  function rhythmSVG() {
+    const W = SHOT_M * 2 + SHOT_COLS * MEASURE;
+    const H = SHOT_TOP + Math.ceil(NM / SHOT_COLS) * SHOT_ROW + 10;
+    const font = `font-family="Hiragino Maru Gothic ProN, M PLUS Rounded 1c, Noto Sans JP, Noto Sans CJK JP, sans-serif" font-weight="bold"`;
+    const d = new Date();
+    let o = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" ${font}>`;
+    o += `<rect width="${W}" height="${H}" fill="#fffaf0"/>`;
+    o += `<text x="${SHOT_M}" y="40" font-size="26" fill="#e8702a">じゅうごやさんの もちつき　リズム</text>`;
+    o += `<text x="${W - SHOT_M}" y="40" font-size="16" fill="#8a7f70" text-anchor="end">テンポ ${state.bpm}　${d.getMonth() + 1}/${d.getDate()}</text>`;
+    const origin = (m) => [SHOT_M + (m % SHOT_COLS) * MEASURE, SHOT_TOP + Math.floor(m / SHOT_COLS) * SHOT_ROW];
+    for (let m = 0; m < NM; m++) {
+      const [x, y] = origin(m);
+      o += `<text x="${x + 6}" y="${y + 14}" font-size="11" font-weight="normal" fill="#8a7f70">${m + 1}</text>`;
+      o += `<text x="${x + MEASURE / 2}" y="${y + 30}" font-size="20" fill="#333" text-anchor="middle">${esc(LYRICS[m])}</text>`;
+      o += `<rect x="${x}" y="${y + 44}" width="${MEASURE}" height="124" fill="#fcfaf6"/>`;
+      for (const k of [1, 2, 3]) {
+        o += `<line x1="${x + k * SLOT}" y1="${y + 52}" x2="${x + k * SLOT}" y2="${y + 160}" stroke="${k === 2 ? '#c9b594' : '#e2d6c2'}" stroke-width="2" stroke-dasharray="${k === 2 ? '6 4' : '2 4'}"/>`;
+      }
+      o += `<rect x="${x - 1.5}" y="${y + 44}" width="3" height="124" fill="#555"/>`;
+      if (m % SHOT_COLS === SHOT_COLS - 1) {
+        if (m === NM - 1) o += `<rect x="${x + MEASURE - 8}" y="${y + 44}" width="2" height="124" fill="#555"/><rect x="${x + MEASURE - 3}" y="${y + 44}" width="5" height="124" fill="#555"/>`;
+        else o += `<rect x="${x + MEASURE - 1.5}" y="${y + 44}" width="3" height="124" fill="#555"/>`;
+      }
+    }
+    const { roles } = computeBeams();
+    for (const n of state.notes) {
+      const def = TYPES[n.t], [x, y] = origin(n.m);
+      const w = def.dur * SLOT - CARD_INSET * 2;
+      const rest = def.rest;
+      o += `<g transform="translate(${x + n.p * SLOT + CARD_INSET} ${y + 50})" color="#222">`;
+      o += `<rect x="1.5" y="1.5" width="${w - 3}" height="109" rx="9" fill="${rest ? '#e3f0fc' : '#fff0d9'}" stroke="${rest ? '#6aa3d8' : '#f0a040'}" stroke-width="3"/>`;
+      if (def.dur >= 2) o += `<rect x="46" y="50" width="${w - 54}" height="10" rx="5" fill="${rest ? '#a8cbee' : '#f5b560'}"/>`;
+      o += symbolSVG(n.t, roles.get(n.id)).replace('<svg class="sym"', '<svg x="4" y="2" width="40" height="70" overflow="visible"');
+      o += `<text x="6" y="100" font-size="20" fill="#222">${def.label}</text>`;
+      o += '</g>';
+    }
+    return { svg: o + '</svg>', W, H };
+  }
+
+  async function rhythmPNG() {
+    const { svg, W, H } = rhythmSVG();
+    const img = new Image();
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    await img.decode();
+    const scale = 2;   // 貼り付けたときにくっきり見えるように 2 倍で描く
+    const cv = document.createElement('canvas');
+    cv.width = W * scale; cv.height = H * scale;
+    const g = cv.getContext('2d');
+    g.scale(scale, scale);
+    g.drawImage(img, 0, 0);
+    return new Promise((resolve, reject) => cv.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob'))), 'image/png'));
+  }
+
+  let toastTimer = 0;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3500);
+  }
+
+  async function copyRhythm() {
+    if (mode !== 'edit') return;
+    const png = rhythmPNG();
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+      toast('📋 コピーしたよ！ ロイロノートで Ctrl + V で はりつけてね');
+    } catch (_) {
+      // コピーできない環境（ファイルを直接開いたときなど）では画像を保存する
+      try {
+        const url = URL.createObjectURL(await png);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'jugoya-rhythm.png';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        toast('💾 がぞうを ダウンロードしたよ');
+      } catch (_) {
+        toast('ごめんね、がぞうを つくれなかったよ');
+      }
+    }
+  }
+  btnShot.addEventListener('click', copyRhythm);
 
   // ===== イベント =====
   btnPlay.addEventListener('click', play);

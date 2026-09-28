@@ -140,7 +140,15 @@
     100% { transform: scale(1); }
   }
   .card.sounding { background: #ffd54f; border-color: #ff8f00; box-shadow: 0 0 14px rgba(255,160,0,.8); }
-  .card.rest.sounding { background: #d0d7de; border-color: #8a96a3; box-shadow: 0 0 10px rgba(120,130,140,.5); }
+  /* 休符は大きくならず「キュッ」と縮み、休みのあいだ小さく薄いままにする */
+  .card.rest.placed { transform-origin: center; transition: transform .15s ease-out, opacity .15s ease-out; }
+  .card.rest.pop { animation: shrink .25s ease-out; }
+  @keyframes shrink {
+    0% { transform: scale(1); }
+    45% { transform: scale(.62); }
+    100% { transform: scale(.78); }
+  }
+  .card.rest.sounding { transform: scale(.78); opacity: .65; background: #d0d7de; border-color: #8a96a3; }
 
   #hint { position: absolute; top: 50px; height: 124px; border-radius: 10px; pointer-events: none; display: none; z-index: 3; }
   #hint.ok { display: block; background: rgba(76,175,80,.18); border: 3px dashed var(--ok); }

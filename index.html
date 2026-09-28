@@ -38,6 +38,8 @@
     min-height: 100%;
   }
   h1 { margin: 0; font-size: 24px; color: var(--accent); letter-spacing: .05em; }
+  header.top { display: flex; align-items: baseline; gap: 12px; }
+  header.top .copy { margin-left: auto; font-size: 13px; color: var(--muted); white-space: nowrap; }
   h1 small { font-size: 16px; color: var(--muted); margin-left: .5em; }
 
   /* ---------- コントロール ---------- */
@@ -347,7 +349,10 @@
 </style>
 </head>
 <body>
-  <h1>じゅうごやさんの もちつき <small>リズムをつくろう ／ さいせい中は スペースキーで うってみよう</small></h1>
+  <header class="top">
+    <h1>じゅうごやさんの もちつき <small>リズムをつくろう ／ さいせい中は スペースキーで うってみよう</small></h1>
+    <span class="copy">©Junichi Ono</span>
+  </header>
 
   <div id="controls">
     <button id="btnPlay" type="button">▶ さいせい</button>

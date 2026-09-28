@@ -564,17 +564,34 @@
   }
 
   // ===== 音（Web Audio API で合成） =====
-  let ctx = null, noiseBuf = null;
-  function ensureAudio() {
+  let ctx = null, noiseBuf = null, audioWarm = false;
+  function initAudio() {
     if (!ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       ctx = new AC();
       noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
       const d = noiseBuf.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      // 無音を 1 つ鳴らして出力装置を起こしておく
+      const warm = ctx.createBufferSource();
+      warm.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+      warm.connect(ctx.destination);
+      warm.start();
     }
-    if (ctx.state === 'suspended') ctx.resume();
+    if (ctx.state !== 'running') ctx.resume().catch(() => {});
   }
+  // 出力が実際に動き出す（currentTime が進み始める）まで待つ。
+  // 起動直後に予約した音は、出力が立ち上がる前に過ぎてしまい鳴らないことがある。
+  async function ensureAudio() {
+    initAudio();
+    if (ctx.state !== 'running') { try { await ctx.resume(); } catch (_) { /* 次の操作で再試行 */ } }
+    const t = ctx.currentTime, limit = performance.now() + 1000;
+    while ((ctx.currentTime === t || ctx.currentTime === 0) && performance.now() < limit) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  }
+  // 最初に画面を触ったときに音の準備を始めておく（Chrome はユーザー操作の中でしか音を開始できない）
+  window.addEventListener('pointerdown', initAudio, { once: true, capture: true });
 
   // ウッドブロック風の「コッ」
   const TICK = {
@@ -616,16 +633,22 @@
   }
 
   // ===== 再生 =====
-  function play() {
-    if (mode === 'playing') return;
+  let starting = false;
+  async function play() {
+    if (mode === 'playing' || starting) return;
     if (drag) finishDrag();
-    ensureAudio();
+    starting = true;
+    btnPlay.disabled = true;
+    try { await ensureAudio(); } finally { starting = false; }
+    if (mode === 'playing') return;
     const resume = mode === 'paused';
     const R = resume ? Math.max(0, Math.floor(pausedE / 2) * 2) : 0;   // 拍の頭から再開
     const labels = resume ? ['1', 'はい！'] : ['3', '2', '1', 'はい！'];
     const startE = R - labels.length * 2;
     const es = 30 / state.bpm;           // 八分音符 1 つの秒数
-    const t0 = ctx.currentTime + 0.12;
+    // 1 回目は出力の立ち上がりに余裕をもたせる
+    const t0 = ctx.currentTime + (audioWarm ? 0.12 : 0.35);
+    audioWarm = true;
     const out = ctx.createGain();
     out.connect(ctx.destination);
     const time = (e) => t0 + (e - startE) * es;
